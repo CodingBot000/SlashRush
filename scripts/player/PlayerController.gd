@@ -2,6 +2,7 @@ extends Node2D
 class_name PlayerController
 
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
+const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
 const RUN_FRAME_PATHS := [
 	"res://assets/sprites/samurai/run/frame_01.png",
 	"res://assets/sprites/samurai/run/frame_02.png",
@@ -86,6 +87,7 @@ func play_slash(strong: bool = false) -> void:
 		_slash_tween.kill()
 
 	_slash_active = true
+	AudioHooksScript.play_sword_slash(self)
 	_update_weapon_layers()
 	sword_slash_sprite.scale = _slash_base_scale * (LONG_SLASH_SCALE_MULTIPLIER if strong else 1.0)
 	sword_slash_sprite.visible = true

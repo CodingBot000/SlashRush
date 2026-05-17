@@ -2,6 +2,7 @@ extends CanvasLayer
 class_name GameHUD
 
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
+const COMBO_IMPACT_POPUP_SCRIPT := preload("res://scripts/ui/ComboImpactPopup.gd")
 const HEART_FULL := "♥"
 const HEART_EMPTY := "♡"
 
@@ -18,6 +19,7 @@ var boss_fill: ColorRect
 var boss_label: Label
 var feedback_label: Label
 var fever_tap_label: Label
+var combo_popup
 var boss_timer_back: ColorRect
 var boss_timer_fill: ColorRect
 var _feedback_tween: Tween
@@ -82,6 +84,10 @@ func show_feedback(text: String, color: Color) -> void:
 	_feedback_tween.tween_interval(0.55)
 	_feedback_tween.tween_property(feedback_label, "modulate:a", 0.0, 0.22)
 
+func show_combo_impact(combo: int = 0) -> void:
+	if combo_popup:
+		combo_popup.play(combo)
+
 func _build_ui() -> void:
 	root = Control.new()
 	root.name = "HUDRoot"
@@ -120,6 +126,10 @@ func _build_ui() -> void:
 	fever_tap_label.add_theme_constant_override("outline_size", 8)
 	fever_tap_label.add_theme_color_override("font_outline_color", Color.html("#26344d"))
 	fever_tap_label.visible = false
+
+	combo_popup = COMBO_IMPACT_POPUP_SCRIPT.new()
+	combo_popup.name = "ComboImpactPopup"
+	root.add_child(combo_popup)
 
 func _make_label(pos: Vector2, size_value: Vector2, font_size: int, color: Color) -> Label:
 	var label := Label.new()

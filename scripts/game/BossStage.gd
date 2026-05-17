@@ -5,15 +5,21 @@ signal stats_changed(score, hp, boss_hp, max_boss_hp, pattern_hint, time_ratio)
 signal feedback_requested(text, color)
 signal boss_finished(payload)
 signal fever_state_changed(is_fever)
+signal combo_increased(combo)
 
 const PLAYER_SCENE := preload("res://scenes/player/Player.tscn")
 const ROBOT_SAMURAI_BOSS_SCENE := preload("res://scenes/boss/RobotSamuraiBoss.tscn")
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
 const PlayerLifeState := preload("res://scripts/game/PlayerLifeState.gd")
+const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
 const SLICE_EFFECT_FACTORY_SCRIPT := preload("res://scripts/objects/SliceEffectFactory.gd")
 const BOSS_FEVER_MODE_SCRIPT := preload("res://scripts/game/BossFeverMode.gd")
+const BOSS_BACKGROUND_PATH := "res://assets/background/stage1/boss_background.png"
+const BOSS_BACKGROUND_ROTATION_SPEED := 0.05
 
 var player
+var boss_background_fill: ColorRect
+var boss_background_sprite: Sprite2D
 var boss_root: Node2D
 var boss_visual: Node2D
 var piece_root: Node2D
@@ -76,6 +82,8 @@ func start_boss(start_score: int, start_coins: int, start_hp: int) -> void:
 	phase2_pattern_index = 0
 	current_phase = BOSS_PHASE_1
 	boss_fever_mode.reset()
+	if boss_visual:
+		boss_visual.set_process(true)
 	active = true
 	visible = true
 	fever_state_changed.emit(false)
@@ -88,6 +96,8 @@ func stop_boss() -> void:
 	player_hurt_timer = 0.0
 	if boss_fever_mode:
 		boss_fever_mode.reset()
+	if boss_visual:
+		boss_visual.set_process(false)
 	fever_state_changed.emit(false)
 
 func handle_player_action(action: String) -> void:
@@ -113,6 +123,9 @@ func handle_player_action(action: String) -> void:
 		_fail_pattern("WRONG")
 
 func _process(delta: float) -> void:
+	_update_boss_background_layout()
+	if boss_background_sprite and active:
+		boss_background_sprite.rotation += BOSS_BACKGROUND_ROTATION_SPEED * delta
 	if not active:
 		return
 	_update_player_hurt(delta)
@@ -132,27 +145,7 @@ func _process(delta: float) -> void:
 			_fail_pattern("MISS")
 
 func _build_scene() -> void:
-	var back := Polygon2D.new()
-	back.name = "BossBack"
-	back.color = Color.html("#1b2230")
-	back.polygon = PackedVector2Array([
-		Vector2(-80.0, -80.0),
-		Vector2(1500.0, -80.0),
-		Vector2(1500.0, 720.0),
-		Vector2(-80.0, 720.0)
-	])
-	add_child(back)
-
-	var floor := Polygon2D.new()
-	floor.name = "BossFloor"
-	floor.color = Color.html("#303833")
-	floor.polygon = PackedVector2Array([
-		Vector2(-80.0, 560.0),
-		Vector2(1500.0, 560.0),
-		Vector2(1500.0, 720.0),
-		Vector2(-80.0, 720.0)
-	])
-	add_child(floor)
+	_add_boss_background()
 
 	player = PLAYER_SCENE.instantiate()
 	player.position = Vector2(250.0, 500.0)
@@ -195,6 +188,26 @@ func _build_scene() -> void:
 
 	slice_factory = SLICE_EFFECT_FACTORY_SCRIPT.new()
 	add_child(slice_factory)
+
+func _add_boss_background() -> void:
+	boss_background_fill = ColorRect.new()
+	boss_background_fill.name = "BossBackgroundFill"
+	boss_background_fill.color = Color.BLACK
+	boss_background_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boss_background_fill.z_index = -200
+	add_child(boss_background_fill)
+
+	var texture := _load_texture(BOSS_BACKGROUND_PATH)
+	if texture == null:
+		return
+
+	boss_background_sprite = Sprite2D.new()
+	boss_background_sprite.name = "BossBackground"
+	boss_background_sprite.texture = texture
+	boss_background_sprite.centered = true
+	boss_background_sprite.z_index = -190
+	add_child(boss_background_sprite)
+	_update_boss_background_layout()
 
 func _next_pattern() -> void:
 	if boss_hp <= 0:
@@ -289,8 +302,8 @@ func _success_pattern(from_fever: bool = false) -> void:
 	score += 400 if from_fever else 200
 	if not from_fever:
 		boss_combo += 1
+		combo_increased.emit(boss_combo)
 		boss_fever_mode.add_fever(GameBalance.BOSS_FEVER_GAIN_PER_SUCCESS)
-		player.play_slash(String(current_pattern["action"]) == "long_tap")
 	current_pattern = {}
 	if boss_hp > 0:
 		_play_boss_hit()
@@ -313,6 +326,7 @@ func _fail_pattern(text: String) -> void:
 		return
 	boss_combo = 0
 	hp -= 1
+	AudioHooksScript.play_player_hurt(self)
 	var player_dead := PlayerLifeState.is_player_dead(hp, _is_player_invincible())
 	if player_dead:
 		PlayerLifeState.show_dead_visual(player)
@@ -436,6 +450,27 @@ func _update_timer_visual(ratio: float) -> void:
 		Vector2(width, 12.0),
 		Vector2(0.0, 12.0)
 	])
+
+func _update_boss_background_layout() -> void:
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		viewport_size = Vector2(1280.0, 720.0)
+	if boss_background_fill:
+		boss_background_fill.position = Vector2.ZERO
+		boss_background_fill.size = viewport_size
+	if boss_background_sprite:
+		boss_background_sprite.position = viewport_size * 0.5
+
+func _load_texture(path: String) -> Texture2D:
+	if ResourceLoader.exists(path, "Texture2D"):
+		var imported_texture := load(path)
+		if imported_texture is Texture2D:
+			return imported_texture
+
+	var image := Image.new()
+	if image.load(path) == OK and not image.is_empty():
+		return ImageTexture.create_from_image(image)
+	return null
 
 func _clear_children(node: Node) -> void:
 	for child in node.get_children():

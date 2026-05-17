@@ -85,14 +85,16 @@ func _fail(message: String) -> void:
 	quit(1)
 
 func _assert_hurt_background_scrolls_all_layers(stage) -> bool:
-	var sky_layer = stage.parallax.get_node_or_null("SkyLayer")
-	if sky_layer == null or not sky_layer.has_meta("factor"):
-		_fail("Sky should be a scrolling parallax layer.")
+	var sky = stage.parallax.get_node_or_null("Sky")
+	if sky == null or sky.has_meta("factor"):
+		_fail("Sky should be static and should not have a scroll factor.")
 		return false
-	if not is_equal_approx(float(sky_layer.get_meta("factor")), 0.24 * 0.6):
-		_fail("Sky should scroll at 60% of the far background speed.")
+	var cloud_layer = stage.parallax.get_node_or_null("CloudLayer")
+	if cloud_layer == null or not cloud_layer.has_meta("factor"):
+		_fail("Clouds should be a scrolling parallax layer.")
 		return false
 
+	var sky_start_x: float = sky.position.x
 	var start_positions := {}
 	for layer in stage.parallax.get_children():
 		if not layer is Node2D or not layer.has_meta("factor") or layer.get_child_count() == 0:
@@ -102,6 +104,10 @@ func _assert_hurt_background_scrolls_all_layers(stage) -> bool:
 			start_positions[layer.name] = item.position.x
 
 	stage.parallax.process_scroll(0.1, GameBalance.MAP_SCROLL_SPEED * stage._get_hurt_background_speed_multiplier())
+
+	if not is_equal_approx(sky.position.x, sky_start_x):
+		_fail("Static sky should not move with hurt background scrolling.")
+		return false
 
 	for layer in stage.parallax.get_children():
 		if not layer is Node2D or not layer.has_meta("factor") or layer.get_child_count() == 0:

@@ -10,9 +10,10 @@ const CLOUD_TEXTURE_PATH := "res://assets/background/stage1/cloud_01.png"
 const FAR_TEXTURE_PATH := "res://assets/background/stage1/far_mountains_01.png"
 const MID_TEXTURE_PATH := "res://assets/background/stage1/mid_structures_01.png"
 const NEAR_TEXTURE_PATH := "res://assets/background/stage1/near_foreground_01.png"
-const ENABLE_NEAR_FOREGROUND_LAYER := false
+const ENABLE_NEAR_FOREGROUND_LAYER := true
 const FAR_LAYER_SCROLL_FACTOR := 0.24
 const CLOUD_SCROLL_FACTOR := 0.0128
+const NEAR_LAYER_Y_OFFSET := -120.0
 
 var alpha_key_shader: Shader
 
@@ -24,7 +25,7 @@ func setup() -> void:
 	_add_image_layer("FarLayer", FAR_TEXTURE_PATH, FAR_LAYER_SCROLL_FACTOR, -80, Color.html("#94cbe6"), 350.0, 120.0)
 	_add_image_layer("MidLayer", MID_TEXTURE_PATH, 0.58, -60, Color.html("#5c7788"), 430.0, 95.0)
 	if ENABLE_NEAR_FOREGROUND_LAYER:
-		_add_image_layer("NearLayer", NEAR_TEXTURE_PATH, 1.12, -40, Color.html("#2c4a42"), 515.0, 58.0)
+		_add_image_layer("NearLayer", NEAR_TEXTURE_PATH, 1.12, -40, Color.html("#2c4a42"), 515.0, 58.0, NEAR_LAYER_Y_OFFSET)
 
 func process_scroll(delta: float, run_speed: float) -> void:
 	for layer in get_children():
@@ -104,7 +105,7 @@ func _add_cloud_layer() -> void:
 		cloud.scale = Vector2(scale_value, scale_value)
 		layer.add_child(cloud)
 
-func _add_image_layer(layer_name: String, texture_path: String, factor: float, z_value: int, fallback_color: Color, fallback_base_y: float, fallback_height: float) -> void:
+func _add_image_layer(layer_name: String, texture_path: String, factor: float, z_value: int, fallback_color: Color, fallback_base_y: float, fallback_height: float, y_offset: float = 0.0) -> void:
 	var texture := _load_texture(texture_path)
 	if texture == null:
 		push_warning("Failed to load parallax texture: %s. Falling back to generated layer." % texture_path)
@@ -130,7 +131,7 @@ func _add_image_layer(layer_name: String, texture_path: String, factor: float, z
 		sprite.name = "%sSegment%d" % [layer_name, index]
 		sprite.texture = texture
 		sprite.centered = false
-		sprite.position = Vector2(float(index) * segment_width, 0.0)
+		sprite.position = Vector2(float(index) * segment_width, y_offset)
 		sprite.scale = Vector2(scale_value, scale_value)
 		sprite.material = _make_light_alpha_key_material()
 		layer.add_child(sprite)

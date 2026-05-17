@@ -3,6 +3,8 @@ class_name PauseOverlay
 
 signal quit_requested
 
+const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
+
 var root: Control
 var pause_button: Button
 var dim: ColorRect
@@ -52,6 +54,7 @@ func _build_ui() -> void:
 	pause_button.tooltip_text = "Pause"
 	pause_button.focus_mode = Control.FOCUS_NONE
 	pause_button.add_theme_font_size_override("font_size", 24)
+	AudioHooksScript.bind_ui_button(self, pause_button)
 	pause_button.pressed.connect(_on_pause_pressed)
 	root.add_child(pause_button)
 
@@ -119,6 +122,7 @@ func _make_popup_button(text: String) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 	button.custom_minimum_size = Vector2(154.0, 58.0)
 	button.add_theme_font_size_override("font_size", 23)
+	AudioHooksScript.bind_ui_button(self, button)
 	return button
 
 func _sync_layout() -> void:

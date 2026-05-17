@@ -1,6 +1,7 @@
 extends Control
 class_name HowToScreen
 
+const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
 const ObjectTypes := preload("res://scripts/data/ObjectTypes.gd")
 
 const MAIN_MENU_SCENE_PATH := "res://scenes/game/MainMenu.tscn"
@@ -110,6 +111,7 @@ func _make_header() -> Control:
 	back_button.text = "< BACK"
 	back_button.custom_minimum_size = Vector2(154.0, 54.0)
 	back_button.add_theme_font_size_override("font_size", 20)
+	AudioHooksScript.bind_ui_button(self, back_button)
 	back_button.pressed.connect(_on_back_pressed)
 	header.add_child(back_button)
 

@@ -2,13 +2,16 @@ extends Control
 class_name IntroScene
 
 const LOGO_PATH := "res://assets/ui/logo.png"
+const INTRO_BACKGROUND_PATH := "res://assets/background/intro/intro_background.png"
 const MAIN_MENU_SCENE_PATH := "res://scenes/game/MainMenu.tscn"
+const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
 
 var logo: TextureRect
 var start_label: Label
 var cloud_layer: Node2D
 var clouds := []
 var elapsed := 0.0
+var opening_main_menu := false
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -48,12 +51,7 @@ func _gui_input(event: InputEvent) -> void:
 func _build_scene() -> void:
 	var screen_size := get_viewport_rect().size
 
-	var background := ColorRect.new()
-	background.name = "DarkBackground"
-	background.set_anchors_preset(Control.PRESET_FULL_RECT)
-	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	background.color = Color.html("#070a11")
-	add_child(background)
+	_add_background()
 
 	cloud_layer = Node2D.new()
 	cloud_layer.name = "CloudLayer"
@@ -106,6 +104,27 @@ func _add_cloud(position_value: Vector2, speed: float, scale_value: float) -> vo
 		"speed": speed
 	})
 
+func _add_background() -> void:
+	var fallback := ColorRect.new()
+	fallback.name = "DarkBackground"
+	fallback.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fallback.color = Color.html("#070a11")
+	add_child(fallback)
+
+	var texture := _load_texture(INTRO_BACKGROUND_PATH)
+	if texture == null:
+		return
+
+	var background := TextureRect.new()
+	background.name = "IntroBackground"
+	background.texture = texture
+	background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	background.ignore_texture_size = true
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	add_child(background)
+
 func _add_cloud_blob(parent: Node2D, position_value: Vector2, radius: float, color: Color) -> void:
 	var blob := Polygon2D.new()
 	blob.position = position_value
@@ -121,6 +140,10 @@ func _circle_points(radius: float, point_count: int) -> PackedVector2Array:
 	return points
 
 func _open_main_menu() -> void:
+	if opening_main_menu:
+		return
+	opening_main_menu = true
+	AudioHooksScript.play_start_game(self)
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
 
 func _load_texture(path: String) -> Texture2D:

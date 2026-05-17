@@ -4,6 +4,7 @@ class_name RunnerStage
 signal stats_changed(score, hp, combo, fever, is_fever, coins)
 signal feedback_requested(text, color)
 signal run_finished(payload)
+signal combo_increased(combo)
 
 const PLAYER_SCENE := preload("res://scenes/player/Player.tscn")
 const INPUT_INTERPRETER_SCRIPT := preload("res://scripts/player/InputInterpreter.gd")
@@ -11,6 +12,7 @@ const GAME_HUD_SCENE := preload("res://scenes/ui/GameHUD.tscn")
 const BOSS_STAGE_SCENE := preload("res://scenes/game/BossStage.tscn")
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
 const PlayerLifeState := preload("res://scripts/game/PlayerLifeState.gd")
+const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
 const PARALLAX_SCROLLER_SCRIPT := preload("res://scripts/game/ParallaxScroller.gd")
 const GROUND_LOOPER_SCRIPT := preload("res://scripts/game/GroundLooper.gd")
 const OBJECT_SPAWNER_SCRIPT := preload("res://scripts/game/ObjectSpawner.gd")
@@ -84,11 +86,13 @@ func start_run() -> void:
 	_build_slice_cut_sequence()
 	visible = true
 	spawner.start()
+	_sync_runner_footsteps()
 	_emit_stats()
 	_emit_feedback("TAP / TAP TAP / HOLD", Color(1.0, 1.0, 1.0, 1.0))
 
 func stop_run() -> void:
 	active = false
+	_sync_runner_footsteps()
 	spawner.stop()
 	if fever_mode:
 		fever_mode.reset()
@@ -106,6 +110,14 @@ func handle_player_action(action: String) -> void:
 		_handle_fever_player_action()
 		return
 
+	_handle_normal_player_action(action)
+
+func _handle_normal_player_action(action: String) -> void:
+	var attack_targets := _get_zone_attack_objects()
+	if not attack_targets.is_empty():
+		_handle_zone_attack_targets(action, attack_targets)
+		return
+
 	var target = _get_nearest_zone_object()
 	if target == null:
 		return
@@ -119,7 +131,7 @@ func handle_player_action(action: String) -> void:
 
 	var required := String(target.required_action)
 	if _action_matches(required, action):
-		_success_object(target, false)
+		_success_object(target, false, false)
 	elif required == "double_tap" and action == "tap":
 		_spawn_world_text("TAP TAP!", target.get_slice_center_global() + Vector2(-35.0, -70.0), Color.html("#ffd84a"))
 	elif required == "long_tap" and action == "tap":
@@ -223,6 +235,7 @@ func _build_standalone_hud() -> void:
 	add_child(standalone_hud)
 	stats_changed.connect(standalone_hud.update_runner)
 	feedback_requested.connect(standalone_hud.show_feedback)
+	combo_increased.connect(standalone_hud.show_combo_impact)
 	standalone_hud.show_runner()
 
 func _handle_standalone_player_action(action: String) -> void:
@@ -259,6 +272,7 @@ func _start_standalone_boss(payload: Dictionary) -> void:
 	standalone_boss_stage.feedback_requested.connect(standalone_hud.show_feedback)
 	standalone_boss_stage.boss_finished.connect(_on_standalone_boss_finished)
 	standalone_boss_stage.fever_state_changed.connect(_on_standalone_boss_fever_state_changed)
+	standalone_boss_stage.combo_increased.connect(standalone_hud.show_combo_impact)
 
 	if standalone_hud:
 		standalone_hud.show_boss()
@@ -364,6 +378,39 @@ func _handle_fever_player_action() -> void:
 		else:
 			_success_object(target, false, false)
 
+func _handle_zone_attack_targets(action: String, targets: Array) -> void:
+	var success_targets := []
+	var prompt_targets := []
+	var fail_targets := []
+	for target in targets:
+		var required := String(target.required_action)
+		if _action_matches(required, action):
+			success_targets.append(target)
+		elif required == "double_tap" and action == "tap":
+			prompt_targets.append({"target": target, "text": "TAP TAP!", "offset": Vector2(-35.0, -70.0), "color": Color.html("#ffd84a")})
+		elif required == "long_tap" and action == "tap":
+			prompt_targets.append({"target": target, "text": "HOLD!", "offset": Vector2(-34.0, -70.0), "color": Color.html("#9ec8ff")})
+		else:
+			fail_targets.append(target)
+
+	for target in success_targets:
+		_success_object(target, false, false)
+
+	for prompt in prompt_targets:
+		var target = prompt["target"]
+		if target.handled:
+			continue
+		_spawn_world_text(
+			String(prompt["text"]),
+			target.get_slice_center_global() + prompt["offset"],
+			prompt["color"]
+		)
+
+	for target in fail_targets:
+		if not active:
+			return
+		_fail_object(target, true)
+
 func _get_nearest_zone_object():
 	var nearest = null
 	var nearest_distance := INF
@@ -391,6 +438,14 @@ func _get_zone_objects() -> Array:
 			continue
 		if _is_in_action_zone(object):
 			objects.append(object)
+	return objects
+
+func _get_zone_attack_objects() -> Array:
+	var objects := []
+	for object in _get_zone_objects():
+		if object.is_good_item:
+			continue
+		objects.append(object)
 	return objects
 
 func _is_in_action_zone(object) -> bool:
@@ -425,6 +480,7 @@ func _success_object(object, automatic: bool, play_player_slash: bool = true) ->
 		_gain_runner_fever(object.fever_value)
 	if _counts_for_combo(object):
 		combo += 1
+		combo_increased.emit(combo)
 	slice_factory.spawn_slice(piece_root, object.get_slice_center_global(), object.get_slice_color(), object.get_slice_size(), object.object_type == "enemy_armor", object.get_slice_texture(), _get_next_slice_cut())
 	if play_player_slash:
 		player.play_slash(object.required_action == "long_tap" or automatic)
@@ -442,6 +498,7 @@ func _fail_object(object, sliced_wrong: bool) -> void:
 	object.handled = true
 	combo = 0
 	hp -= object.damage_on_fail
+	AudioHooksScript.play_player_hurt(self)
 	var player_dead := PlayerLifeState.is_player_dead(hp, _is_player_invincible())
 	if sliced_wrong:
 		slice_factory.spawn_slice(piece_root, object.get_slice_center_global(), Color.html("#c83f3f"), object.get_slice_size(), false, object.get_slice_texture(), _get_next_slice_cut())
@@ -489,6 +546,7 @@ func _collect_good_item(object, automatic: bool) -> void:
 		_discard_object_during_hurt(object)
 		return
 	object.handled = true
+	AudioHooksScript.play_pickup_item(self)
 	if object.object_type == "coin":
 		coins += object.score_value
 	var heal_was_full: bool = object.object_type == "heal" and hp >= GameBalance.MAX_HP
@@ -522,6 +580,7 @@ func _collect_good_item_as_fever_coin_bonus(object) -> void:
 		_discard_object_during_hurt(object)
 		return
 	object.handled = true
+	AudioHooksScript.play_pickup_item(self)
 	var coin_bonus := GameBalance.FEVER_GOOD_ITEM_SLICE_COIN_BONUS
 	coins += coin_bonus
 	score += coin_bonus * 2
@@ -643,11 +702,13 @@ func _get_scroll_speed_multiplier() -> float:
 
 func _start_hurt_slow() -> void:
 	hurt_slow_timer = max(hurt_slow_timer, GameBalance.PLAYER_HURT_SLOW_DURATION)
+	_sync_runner_footsteps()
 
 func _update_hurt_slow(delta: float) -> void:
 	if hurt_slow_timer <= 0.0:
 		return
 	hurt_slow_timer = max(0.0, hurt_slow_timer - delta)
+	_sync_runner_footsteps()
 
 func _get_hurt_background_speed_multiplier() -> float:
 	return GameBalance.PLAYER_HURT_BACKGROUND_SPEED_MULTIPLIER if hurt_slow_timer > 0.0 else 1.0
@@ -710,6 +771,10 @@ func _get_next_slice_cut() -> Dictionary:
 func _is_player_invincible() -> bool:
 	var debug_flags := get_node_or_null("/root/DebugFlags")
 	return debug_flags != null and bool(debug_flags.player_invincible)
+
+func _sync_runner_footsteps() -> void:
+	var player_dead := PlayerLifeState.is_player_dead(hp, _is_player_invincible())
+	AudioHooksScript.set_runner_footsteps_active(self, active and hurt_slow_timer <= 0.0 and not player_dead)
 
 func _spawn_world_text(text: String, pos: Vector2, color: Color, font_size: int = 24, label_size: Vector2 = Vector2(130.0, 40.0), emphasized: bool = false) -> void:
 	var label := Label.new()

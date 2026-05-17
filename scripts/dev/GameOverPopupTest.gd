@@ -38,6 +38,10 @@ func _assert_runner_game_over() -> void:
 		push_error("Result panel is hidden after HP reached 0.")
 		quit(1)
 		return
+	if not main.result_panel.dead_overlay_sprite.visible:
+		push_error("Dead overlay should be visible above the dim layer after runner game over.")
+		quit(1)
+		return
 	if main.result_panel.title_label.text != "GAME OVER":
 		push_error("Game over popup title was not shown.")
 		quit(1)
@@ -56,6 +60,11 @@ func _assert_runner_game_over() -> void:
 		return
 	if not _has_visible_dead_sprite(main.runner_stage.player):
 		push_error("Runner player dead sprite should be visible after game over.")
+		quit(1)
+		return
+	await create_timer(1.1).timeout
+	if main.result_panel.dim.color.a < 0.8:
+		push_error("Game over dim should reach a dark overlay after the fade.")
 		quit(1)
 		return
 
@@ -84,6 +93,14 @@ func _assert_boss_game_over() -> void:
 		return
 	if not main.boss_stage.visible:
 		push_error("Boss stage should remain visible behind the game over popup.")
+		quit(1)
+		return
+	if main.boss_stage.boss_visual.is_processing():
+		push_error("Boss visual processing should stop after game over.")
+		quit(1)
+		return
+	if not main.result_panel.dead_overlay_sprite.visible:
+		push_error("Dead overlay should be visible above the dim layer after boss game over.")
 		quit(1)
 		return
 	if not _has_visible_dead_sprite(main.boss_stage.player):

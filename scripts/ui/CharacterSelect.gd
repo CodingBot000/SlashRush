@@ -1,6 +1,7 @@
 extends Control
 class_name CharacterSelect
 
+const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
 const MAIN_MENU_SCENE_PATH := "res://scenes/game/MainMenu.tscn"
 const DEFAULT_MESSAGE := "More characters will be available in future versions."
 
@@ -126,6 +127,7 @@ func _make_header() -> Control:
 	back_button.text = "< BACK"
 	back_button.custom_minimum_size = Vector2(154.0, 54.0)
 	back_button.add_theme_font_size_override("font_size", 20)
+	AudioHooksScript.bind_ui_button(self, back_button)
 	back_button.pressed.connect(_on_back_button_pressed)
 	header.add_child(back_button)
 
@@ -393,6 +395,7 @@ func _on_character_card_pressed(data: Dictionary) -> void:
 	if suppress_next_card_press:
 		suppress_next_card_press = false
 		return
+	AudioHooksScript.play_ui_button_click(self)
 	if bool(data.get("selected", false)):
 		_show_message("Already selected")
 	else:
@@ -402,6 +405,7 @@ func _on_coming_soon_card_pressed() -> void:
 	if suppress_next_card_press:
 		suppress_next_card_press = false
 		return
+	AudioHooksScript.play_ui_button_click(self)
 	_show_message("Coming soon")
 
 func _begin_scroll_drag() -> void:

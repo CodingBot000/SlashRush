@@ -1,8 +1,12 @@
 extends Control
 class_name MainMenu
 
+const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
 const LOGO_PATH := "res://assets/ui/logo.png"
-const PLAYER_PATH := "res://assets/characters/player.png"
+const INTRO_BACKGROUND_PATH := "res://assets/background/intro/intro_background.png"
+const MENU_BUTTON_BACKGROUND_PATH := "res://assets/ui/button_rectangle_depth_flat.png"
+const SETTINGS_ICON_PATH := "res://assets/ui/icon_setting.png"
+const PLAYER_PATH := "res://assets/characters/player1.png"
 const GAME_SCENE_PATH := "res://scenes/Main.tscn"
 const HOW_TO_SCENE_PATH := "res://scenes/ui/HowToScreen.tscn"
 const CHARACTER_SELECT_SCENE_PATH := "res://scenes/ui/CharacterSelect.tscn"
@@ -15,12 +19,7 @@ func _ready() -> void:
 func _build_scene() -> void:
 	var screen_size := get_viewport_rect().size
 
-	var background := ColorRect.new()
-	background.name = "MenuBackground"
-	background.set_anchors_preset(Control.PRESET_FULL_RECT)
-	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	background.color = Color.html("#0a0d14")
-	add_child(background)
+	_add_background()
 
 	var logo := TextureRect.new()
 	logo.name = "LogoSmall"
@@ -32,13 +31,7 @@ func _build_scene() -> void:
 	logo.size = Vector2(220.0, 148.0)
 	add_child(logo)
 
-	var settings_button := Button.new()
-	settings_button.name = "SettingsButton"
-	settings_button.text = "SETTINGS"
-	settings_button.position = Vector2(screen_size.x - 172.0, 32.0)
-	settings_button.size = Vector2(132.0, 48.0)
-	settings_button.add_theme_font_size_override("font_size", 16)
-	add_child(settings_button)
+	_add_settings_button(Vector2(screen_size.x - 88.0, 32.0))
 
 	var player := TextureRect.new()
 	player.name = "PlayerPreview"
@@ -78,8 +71,58 @@ func _make_menu_button(text: String, position_value: Vector2, size_value: Vector
 	button.position = position_value
 	button.size = size_value
 	button.add_theme_font_size_override("font_size", 28)
+	_apply_menu_button_background(button)
+	AudioHooksScript.bind_ui_button(self, button)
 	add_child(button)
 	return button
+
+func _add_settings_button(position_value: Vector2) -> void:
+	var settings_button := Button.new()
+	settings_button.name = "SettingsButton"
+	settings_button.text = ""
+	settings_button.icon = _load_texture(SETTINGS_ICON_PATH)
+	settings_button.expand_icon = true
+	settings_button.flat = true
+	settings_button.position = position_value
+	settings_button.size = Vector2(48.0, 48.0)
+	var empty_stylebox := StyleBoxEmpty.new()
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		settings_button.add_theme_stylebox_override(state, empty_stylebox)
+	AudioHooksScript.bind_ui_button(self, settings_button)
+	add_child(settings_button)
+
+func _apply_menu_button_background(button: Button) -> void:
+	var texture := _load_texture(MENU_BUTTON_BACKGROUND_PATH)
+	if texture == null:
+		return
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		button.add_theme_stylebox_override(state, _make_menu_button_stylebox(texture))
+
+func _make_menu_button_stylebox(texture: Texture2D) -> StyleBoxTexture:
+	var stylebox := StyleBoxTexture.new()
+	stylebox.texture = texture
+	return stylebox
+
+func _add_background() -> void:
+	var fallback := ColorRect.new()
+	fallback.name = "MenuBackground"
+	fallback.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fallback.color = Color.html("#0a0d14")
+	add_child(fallback)
+
+	var texture := _load_texture(INTRO_BACKGROUND_PATH)
+	if texture == null:
+		return
+
+	var background := TextureRect.new()
+	background.name = "IntroBackground"
+	background.texture = texture
+	background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	background.ignore_texture_size = true
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	add_child(background)
 
 func _on_play_pressed() -> void:
 	get_tree().change_scene_to_file(GAME_SCENE_PATH)

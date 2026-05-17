@@ -47,6 +47,7 @@ func _build_nodes() -> void:
 	runner_stage.stats_changed.connect(_on_runner_stats_changed)
 	runner_stage.feedback_requested.connect(_on_feedback_requested)
 	runner_stage.run_finished.connect(_on_runner_finished)
+	runner_stage.combo_increased.connect(_on_combo_increased)
 
 	boss_stage = BOSS_STAGE_SCENE.instantiate()
 	add_child(boss_stage)
@@ -54,6 +55,7 @@ func _build_nodes() -> void:
 	boss_stage.feedback_requested.connect(_on_feedback_requested)
 	boss_stage.boss_finished.connect(_on_boss_finished)
 	boss_stage.fever_state_changed.connect(_on_boss_fever_state_changed)
+	boss_stage.combo_increased.connect(_on_combo_increased)
 
 	game_hud = GAME_HUD_SCENE.instantiate()
 	add_child(game_hud)
@@ -118,6 +120,7 @@ func _show_result(won: bool) -> void:
 	if state == "result":
 		return
 	var finished_state := state
+	var dead_overlay_data := _get_dead_overlay_data(finished_state, won)
 	state = "result"
 	pause_overlay.set_gameplay_active(false)
 	input_interpreter.clear_action_blocked_provider()
@@ -128,7 +131,18 @@ func _show_result(won: bool) -> void:
 	game_hud.visible = false
 	best_score = max(best_score, current_score)
 	_save_game()
-	result_panel.show_result(won, current_score, current_coins, best_score)
+	if dead_overlay_data.is_empty():
+		result_panel.show_result(won, current_score, current_coins, best_score)
+	else:
+		result_panel.show_result(
+			won,
+			current_score,
+			current_coins,
+			best_score,
+			dead_overlay_data["position"],
+			dead_overlay_data["scale"],
+			dead_overlay_data["texture"]
+		)
 
 func _on_input_action(action: String) -> void:
 	match state:
@@ -174,9 +188,36 @@ func _on_boss_finished(payload: Dictionary) -> void:
 func _on_feedback_requested(text: String, color: Color) -> void:
 	game_hud.show_feedback(text, color)
 
+func _on_combo_increased(combo: int) -> void:
+	game_hud.show_combo_impact(combo)
+
 func _quit_game() -> void:
 	pause_overlay.set_gameplay_active(false)
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
+
+func _get_dead_overlay_data(finished_state: String, won: bool) -> Dictionary:
+	if won:
+		return {}
+
+	var finished_player = null
+	if finished_state == "runner" and runner_stage:
+		finished_player = runner_stage.player
+	elif finished_state == "boss" and boss_stage:
+		finished_player = boss_stage.player
+
+	if finished_player == null:
+		return {}
+
+	var dead_sprite = finished_player.find_child("DeadSprite", true, false)
+	if not (dead_sprite is Sprite2D) or dead_sprite.texture == null or not dead_sprite.visible:
+		return {}
+
+	var transform: Transform2D = dead_sprite.get_global_transform_with_canvas()
+	return {
+		"position": transform.origin,
+		"scale": transform.get_scale(),
+		"texture": dead_sprite.texture
+	}
 
 func _ensure_input_actions() -> void:
 	_add_action_if_missing("tap_action")

@@ -22,13 +22,30 @@ func _run() -> void:
 		quit(1)
 		return
 
-	panel.show_result(false, 320, 40, 1200)
+	panel.show_result(false, 320, 40, 1200, Vector2(210.0, 500.0))
 	if panel.title_label.text != "GAME OVER":
 		push_error("Game over title was not shown.")
 		quit(1)
 		return
 	if panel.retry_button.text != "RETRY" or not panel.quit_button.visible:
 		push_error("Result buttons were not configured.")
+		quit(1)
+		return
+	if panel.find_child("Popup", true, false) != null:
+		push_error("Result UI should not use a visible popup container.")
+		quit(1)
+		return
+	if not panel.dead_overlay_sprite.visible or panel.dead_overlay_sprite.z_index <= panel.dim.z_index:
+		push_error("Dead overlay should be visible above the dim layer.")
+		quit(1)
+		return
+	if panel.dim.color.a > 0.01:
+		push_error("Game over dim should start transparent before fading in.")
+		quit(1)
+		return
+	await create_timer(1.1).timeout
+	if panel.dim.color.a < 0.8:
+		push_error("Game over dim should fade in over time.")
 		quit(1)
 		return
 
