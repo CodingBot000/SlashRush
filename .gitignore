@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Godot local/editor cache
+.godot/
+.import/
+*.translation
+
+# Local exports and verification artifacts
+build/
+builds/
+output/
+.playwright-cli/
+
+# Temporary/generated work folders
+tmp/
+docs/
+backup1_assetsOld/
+assets/tmp_newasset/
+assets/sprites/**/run_preview.*
+
+# Logs and scratch files
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Godot export credentials can contain local signing or account secrets.
+export_credentials.cfg

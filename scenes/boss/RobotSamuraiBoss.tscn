@@ -1,0 +1,113 @@
+[gd_scene format=3 uid="uid://cyxo0jofqf82u"]
+
+[ext_resource type="Script" uid="uid://bu8h2wnm70e7g" path="res://scripts/boss/RobotSamuraiBoss.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://assets/boss/robot_samurai/boss_core.png" id="6_core"]
+[ext_resource type="Texture2D" path="res://assets/boss/robot_samurai/boss_cloth_left.png" id="7_cloth_left"]
+[ext_resource type="Texture2D" path="res://assets/boss/robot_samurai/boss_cloth_right.png" id="8_cloth_right"]
+[ext_resource type="Texture2D" path="res://assets/boss/robot_samurai/boss_sword.png" id="9_sword"]
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_sgwmc"]
+load_path = "res://.godot/imported/boss_body.png-43f34c48048e9ed8fe74a6e3578f29a7.ctex"
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_668n3"]
+load_path = "res://.godot/imported/boss_head.png-284efb406f5cc52de185684d199edfd0.ctex"
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_pkq2d"]
+load_path = "res://.godot/imported/boss_left_arm.png-4a5b98f81823e55d0e6a76f8c12b6c87.ctex"
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_n3ebp"]
+load_path = "res://.godot/imported/boss_right_arm.png-0f568e539a6cc22f1eeb231844b5f84b.ctex"
+
+[node name="RobotSamuraiBoss" type="Node2D" unique_id=196554292]
+position = Vector2(34.999996, 25.999998)
+scale = Vector2(0.7, 0.7)
+script = ExtResource("1_script")
+
+[node name="BodyPivot" type="Node2D" parent="." unique_id=1992900502]
+position = Vector2(-38.571426, -221.42857)
+
+[node name="Body" type="Sprite2D" parent="BodyPivot" unique_id=1540953618]
+position = Vector2(-28.571436, 45.71428)
+scale = Vector2(0.31733727, 0.31733724)
+texture = SubResource("CompressedTexture2D_sgwmc")
+
+[node name="HeadPivot" type="Node2D" parent="." unique_id=200556308]
+z_index = 3
+position = Vector2(-115, -360)
+scale = Vector2(0.5, 0.5)
+
+[node name="Head" type="Sprite2D" parent="HeadPivot" unique_id=690165022]
+z_index = 4
+position = Vector2(121.48117, -316.7119)
+scale = Vector2(0.8339969, 0.82708806)
+texture = SubResource("CompressedTexture2D_668n3")
+
+[node name="LeftArmPivot" type="Node2D" parent="." unique_id=560408829]
+z_index = 1
+position = Vector2(118, -301.429)
+scale = Vector2(0.5, 0.5)
+
+[node name="LeftSwordPivot" type="Node2D" parent="LeftArmPivot" unique_id=502762122]
+position = Vector2(-130, 639.076)
+scale = Vector2(0.99999994, 0.99999994)
+
+[node name="LeftSword" type="Sprite2D" parent="LeftArmPivot/LeftSwordPivot" unique_id=435489915]
+z_index = 10
+position = Vector2(-257.4286, -427.64667)
+rotation = -0.0698132
+scale = Vector2(0.72774106, 0.77687913)
+texture = ExtResource("9_sword")
+
+[node name="LeftArm" type="Sprite2D" parent="LeftArmPivot" unique_id=1448222976]
+z_index = 12
+position = Vector2(107.17859, 267.34845)
+scale = Vector2(0.73772335, 0.7377232)
+texture = SubResource("CompressedTexture2D_pkq2d")
+
+[node name="RightArmPivot" type="Node2D" parent="." unique_id=377280940]
+z_index = 1
+position = Vector2(-120, -296.429)
+scale = Vector2(0.5, 0.5)
+
+[node name="RightArm" type="Sprite2D" parent="RightArmPivot" unique_id=1144509058]
+position = Vector2(-331.42853, 232.858)
+scale = Vector2(0.5685785, 0.5685784)
+texture = SubResource("CompressedTexture2D_n3ebp")
+
+[node name="RightSwordPivot" type="Node2D" parent="RightArmPivot" unique_id=185130658]
+position = Vector2(-465.7143, 401.4294)
+
+[node name="RightSword" type="Sprite2D" parent="RightArmPivot/RightSwordPivot" unique_id=1240555671]
+z_index = 2
+position = Vector2(-291.42862, -374.2857)
+rotation = 0.0523599
+scale = Vector2(0.697781, 0.7058813)
+texture = ExtResource("9_sword")
+
+[node name="CorePivot" type="Node2D" parent="." unique_id=36256737]
+visible = false
+z_index = 2
+position = Vector2(-26, -222)
+
+[node name="Core" type="Sprite2D" parent="CorePivot" unique_id=98423645]
+position = Vector2(-61.142857, 274.85712)
+texture = ExtResource("6_core")
+
+[node name="ClothLeftPivot" type="Node2D" parent="." unique_id=1458500031]
+visible = false
+z_index = -3
+position = Vector2(-105, -155)
+
+[node name="ClothLeft" type="Sprite2D" parent="ClothLeftPivot" unique_id=2098253245]
+position = Vector2(-152.14287, 239.2857)
+texture = ExtResource("7_cloth_left")
+
+[node name="ClothRightPivot" type="Node2D" parent="." unique_id=1882605736]
+visible = false
+z_index = -3
+position = Vector2(86, -158)
+
+[node name="ClothRight" type="Sprite2D" parent="ClothRightPivot" unique_id=1374297516]
+position = Vector2(126.85715, 222.28572)
+scale = Vector2(1, 1.0145929)
+texture = ExtResource("8_cloth_right")

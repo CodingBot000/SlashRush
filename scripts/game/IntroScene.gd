@@ -1,0 +1,135 @@
+extends Control
+class_name IntroScene
+
+const LOGO_PATH := "res://assets/ui/logo.png"
+const MAIN_MENU_SCENE_PATH := "res://scenes/game/MainMenu.tscn"
+
+var logo: TextureRect
+var start_label: Label
+var cloud_layer: Node2D
+var clouds := []
+var elapsed := 0.0
+
+func _ready() -> void:
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	_build_scene()
+
+func _process(delta: float) -> void:
+	elapsed += delta
+	if logo:
+		var logo_scale := 1.0 + sin(elapsed * TAU / 3.0) * 0.035
+		logo.scale = Vector2(logo_scale, logo_scale)
+	if start_label:
+		start_label.modulate.a = 0.32 + ((sin(elapsed * 3.2) + 1.0) * 0.34)
+
+	var screen_size := get_viewport_rect().size
+	for cloud_data in clouds:
+		var node: Node2D = cloud_data["node"]
+		node.position.x += float(cloud_data["speed"]) * delta
+		if node.position.x > screen_size.x + 260.0:
+			node.position.x = -260.0
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch and event.pressed:
+		_open_main_menu()
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_open_main_menu()
+	elif event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
+			_open_main_menu()
+
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch and event.pressed:
+		_open_main_menu()
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_open_main_menu()
+
+func _build_scene() -> void:
+	var screen_size := get_viewport_rect().size
+
+	var background := ColorRect.new()
+	background.name = "DarkBackground"
+	background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background.color = Color.html("#070a11")
+	add_child(background)
+
+	cloud_layer = Node2D.new()
+	cloud_layer.name = "CloudLayer"
+	add_child(cloud_layer)
+	_add_cloud(Vector2(80.0, 120.0), 22.0, 1.15)
+	_add_cloud(Vector2(390.0, 92.0), 14.0, 0.85)
+	_add_cloud(Vector2(720.0, 150.0), 18.0, 1.0)
+	_add_cloud(Vector2(1060.0, 105.0), 12.0, 0.78)
+	_add_cloud(Vector2(1180.0, 270.0), 10.0, 0.95)
+	_add_cloud(Vector2(240.0, 300.0), 16.0, 0.72)
+
+	logo = TextureRect.new()
+	logo.name = "Logo"
+	logo.texture = _load_texture(LOGO_PATH)
+	logo.ignore_texture_size = true
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	logo.size = Vector2(560.0, 374.0)
+	logo.position = Vector2((screen_size.x - logo.size.x) * 0.5, 166.0)
+	logo.pivot_offset = logo.size * 0.5
+	add_child(logo)
+
+	start_label = Label.new()
+	start_label.name = "TapToStartLabel"
+	start_label.text = "TAP TO START"
+	start_label.position = Vector2(0.0, 540.0)
+	start_label.size = Vector2(screen_size.x, 44.0)
+	start_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	start_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	start_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	start_label.add_theme_font_size_override("font_size", 22)
+	start_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.82))
+	add_child(start_label)
+
+func _add_cloud(position_value: Vector2, speed: float, scale_value: float) -> void:
+	var cloud := Node2D.new()
+	cloud.name = "Cloud"
+	cloud.position = position_value
+	cloud.scale = Vector2(scale_value, scale_value)
+	cloud_layer.add_child(cloud)
+
+	var color := Color(0.45, 0.50, 0.58, 0.16)
+	_add_cloud_blob(cloud, Vector2(-90.0, 12.0), 78.0, color)
+	_add_cloud_blob(cloud, Vector2(-28.0, -8.0), 96.0, color)
+	_add_cloud_blob(cloud, Vector2(54.0, 8.0), 82.0, color)
+	_add_cloud_blob(cloud, Vector2(126.0, 18.0), 56.0, color)
+
+	clouds.append({
+		"node": cloud,
+		"speed": speed
+	})
+
+func _add_cloud_blob(parent: Node2D, position_value: Vector2, radius: float, color: Color) -> void:
+	var blob := Polygon2D.new()
+	blob.position = position_value
+	blob.color = color
+	blob.polygon = _circle_points(radius, 24)
+	parent.add_child(blob)
+
+func _circle_points(radius: float, point_count: int) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for index in range(point_count):
+		var angle := TAU * float(index) / float(point_count)
+		points.append(Vector2(cos(angle), sin(angle) * 0.44) * radius)
+	return points
+
+func _open_main_menu() -> void:
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
+
+func _load_texture(path: String) -> Texture2D:
+	if ResourceLoader.exists(path, "Texture2D"):
+		var imported_texture := load(path)
+		if imported_texture is Texture2D:
+			return imported_texture
+
+	var image := Image.new()
+	if image.load(path) == OK and not image.is_empty():
+		return ImageTexture.create_from_image(image)
+	return null
