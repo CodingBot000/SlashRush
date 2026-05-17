@@ -15,6 +15,19 @@ func _run() -> void:
 	if card_row == null:
 		_fail("How To card row was not created.")
 		return
+	var scroller := how_to_screen.get_node_or_null("SafeArea/Layout/CardScroll")
+	if not scroller is ScrollContainer:
+		_fail("How To screen should use a ScrollContainer.")
+		return
+	if scroller.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED:
+		_fail("How To horizontal scrolling should be enabled.")
+		return
+	if scroller.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED:
+		_fail("How To vertical scrolling should be disabled.")
+		return
+	if not _drag_scrolls_card_row(how_to_screen, scroller):
+		_fail("How To screen should support horizontal drag scrolling.")
+		return
 	if card_row.get_child_count() != 5:
 		_fail("How To screen should create exactly 5 cards.")
 		return
@@ -31,11 +44,15 @@ func _run() -> void:
 			_fail("Missing How To target mapping: %s" % expected_tag)
 			return
 
-	if how_to_screen.get_node_or_null("SafeArea/Layout/Footer/BackButton") == null:
-		_fail("How To screen is missing BackButton.")
+	var back_button := how_to_screen.get_node_or_null("SafeArea/Layout/Header/BackButton")
+	if not back_button is Button:
+		_fail("How To screen is missing Header BackButton.")
 		return
-	if how_to_screen.get_node_or_null("SafeArea/Layout/Footer/StartButton") == null:
-		_fail("How To screen is missing StartButton.")
+	if back_button.text != "< BACK":
+		_fail("How To BackButton should match CharacterSelect BackButton text.")
+		return
+	if how_to_screen.find_child("StartButton", true, false) != null:
+		_fail("How To screen should not create StartButton.")
 		return
 
 	var main_menu := MAIN_MENU_SCENE.instantiate()
@@ -58,6 +75,28 @@ func _card_row_has_tag(card_row: Node, expected_tag: String) -> bool:
 		if tag_label is Label and expected_tag in tag_label.text:
 			return true
 	return false
+
+func _drag_scrolls_card_row(how_to_screen: Node, scroller: ScrollContainer) -> bool:
+	var start_position := scroller.get_global_rect().get_center()
+	var press_event := InputEventMouseButton.new()
+	press_event.button_index = MOUSE_BUTTON_LEFT
+	press_event.pressed = true
+	press_event.position = start_position
+	how_to_screen._input(press_event)
+
+	var drag_event := InputEventMouseMotion.new()
+	drag_event.button_mask = MOUSE_BUTTON_MASK_LEFT
+	drag_event.position = start_position + Vector2(-96.0, 0.0)
+	drag_event.relative = Vector2(-96.0, 0.0)
+	how_to_screen._input(drag_event)
+
+	var release_event := InputEventMouseButton.new()
+	release_event.button_index = MOUSE_BUTTON_LEFT
+	release_event.pressed = false
+	release_event.position = drag_event.position
+	how_to_screen._input(release_event)
+
+	return scroller.scroll_horizontal > 0
 
 func _find_button_with_text(node: Node, text: String) -> Button:
 	if node is Button and node.text == text:

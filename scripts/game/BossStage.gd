@@ -9,6 +9,7 @@ signal fever_state_changed(is_fever)
 const PLAYER_SCENE := preload("res://scenes/player/Player.tscn")
 const ROBOT_SAMURAI_BOSS_SCENE := preload("res://scenes/boss/RobotSamuraiBoss.tscn")
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
+const PlayerLifeState := preload("res://scripts/game/PlayerLifeState.gd")
 const SLICE_EFFECT_FACTORY_SCRIPT := preload("res://scripts/objects/SliceEffectFactory.gd")
 const BOSS_FEVER_MODE_SCRIPT := preload("res://scripts/game/BossFeverMode.gd")
 
@@ -30,6 +31,7 @@ var boss_combo := 0
 var current_pattern := {}
 var pattern_time_left := 0.0
 var pattern_total_time := 1.0
+var player_hurt_timer := 0.0
 var phase1_patterns: Array = []
 var phase2_patterns: Array = []
 var phase1_pattern_index := 0
@@ -66,6 +68,9 @@ func start_boss(start_score: int, start_coins: int, start_hp: int) -> void:
 	hp = min(start_hp, GameBalance.MAX_HP) if _is_player_invincible() else clampi(start_hp, 1, GameBalance.MAX_HP)
 	boss_hp = GameBalance.BOSS_MAX_HP
 	boss_combo = 0
+	player_hurt_timer = 0.0
+	if player and player.has_method("play_run"):
+		player.play_run()
 	_build_phase_pattern_decks()
 	phase1_pattern_index = 0
 	phase2_pattern_index = 0
@@ -80,12 +85,15 @@ func start_boss(start_score: int, start_coins: int, start_hp: int) -> void:
 func stop_boss() -> void:
 	active = false
 	visible = false
+	player_hurt_timer = 0.0
 	if boss_fever_mode:
 		boss_fever_mode.reset()
 	fever_state_changed.emit(false)
 
 func handle_player_action(action: String) -> void:
 	if not active or current_pattern.is_empty():
+		return
+	if is_player_hurt_locked():
 		return
 	player.play_slash(action == "long_tap")
 	if _is_boss_fever_active():
@@ -105,7 +113,10 @@ func handle_player_action(action: String) -> void:
 		_fail_pattern("WRONG")
 
 func _process(delta: float) -> void:
-	if not active or current_pattern.is_empty():
+	if not active:
+		return
+	_update_player_hurt(delta)
+	if current_pattern.is_empty():
 		return
 	_update_boss_fever(delta)
 	pattern_time_left -= delta
@@ -189,7 +200,7 @@ func _next_pattern() -> void:
 	if boss_hp <= 0:
 		_finish(true)
 		return
-	if hp <= 0 and not _is_player_invincible():
+	if PlayerLifeState.is_player_dead(hp, _is_player_invincible()):
 		_finish(false)
 		return
 	current_phase = _get_current_boss_phase()
@@ -293,15 +304,23 @@ func _success_pattern(from_fever: bool = false) -> void:
 func _fail_pattern(text: String) -> void:
 	if not active:
 		return
+	if is_player_hurt_locked():
+		_next_pattern()
+		return
 	if _is_boss_fever_active():
 		feedback_requested.emit("FEVER", Color.html("#5ef3ff"))
 		_next_pattern()
 		return
 	boss_combo = 0
 	hp -= 1
-	player.flash_hurt()
+	var player_dead := PlayerLifeState.is_player_dead(hp, _is_player_invincible())
+	if player_dead:
+		PlayerLifeState.show_dead_visual(player)
+	else:
+		player.flash_hurt()
+	_start_player_hurt_lock()
 	feedback_requested.emit(text, Color.html("#ff6b6b"))
-	if hp <= 0 and not _is_player_invincible():
+	if player_dead:
 		_finish(false)
 	else:
 		_next_pattern()
@@ -331,6 +350,17 @@ func _action_matches(required: String, action: String) -> bool:
 	if required == "tap" and action == "double_tap":
 		return true
 	return false
+
+func is_player_hurt_locked() -> bool:
+	return active and player_hurt_timer > 0.0
+
+func _start_player_hurt_lock() -> void:
+	player_hurt_timer = max(player_hurt_timer, GameBalance.PLAYER_HURT_SLOW_DURATION)
+
+func _update_player_hurt(delta: float) -> void:
+	if player_hurt_timer <= 0.0:
+		return
+	player_hurt_timer = max(0.0, player_hurt_timer - delta)
 
 func _update_boss_fever(delta: float) -> void:
 	if boss_fever_mode:

@@ -14,8 +14,11 @@ var _slash_recovery_until := -10.0
 var _press_started_in_recovery := false
 var _pressed_by_touch := false
 var _fever_mode_active := false
+var _action_blocked_provider := Callable()
 
 func _process(_delta: float) -> void:
+	if _is_action_blocked():
+		_clear_current_press()
 	if Input.is_action_just_pressed("tap_action"):
 		_mark_pressed(false)
 	if Input.is_action_just_released("tap_action"):
@@ -42,7 +45,16 @@ func set_fever_mode_active(active: bool) -> void:
 	if active:
 		_slash_recovery_until = -10.0
 
+func set_action_blocked_provider(provider: Callable) -> void:
+	_action_blocked_provider = provider
+
+func clear_action_blocked_provider() -> void:
+	_action_blocked_provider = Callable()
+
 func _mark_pressed(from_touch: bool) -> void:
+	if _is_action_blocked():
+		_clear_current_press()
+		return
 	if _pressed_by_touch and not from_touch:
 		return
 	_pressed_by_touch = from_touch
@@ -51,6 +63,9 @@ func _mark_pressed(from_touch: bool) -> void:
 	_press_started_in_recovery = _is_recovering(pressed_at)
 
 func _mark_released(from_touch: bool) -> void:
+	if _is_action_blocked():
+		_clear_current_press()
+		return
 	if _press_started_at < 0.0:
 		return
 	if _pressed_by_touch and not from_touch:
@@ -102,3 +117,13 @@ func _start_recovery(duration: float, started_at: float) -> void:
 	if _fever_mode_active:
 		return
 	_slash_recovery_until = started_at + duration
+
+func _is_action_blocked() -> bool:
+	if not _action_blocked_provider.is_valid():
+		return false
+	return bool(_action_blocked_provider.call())
+
+func _clear_current_press() -> void:
+	_press_started_at = -1.0
+	_press_started_in_recovery = false
+	_pressed_by_touch = false

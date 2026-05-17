@@ -3,8 +3,9 @@ class_name MainMenu
 
 const LOGO_PATH := "res://assets/ui/logo.png"
 const PLAYER_PATH := "res://assets/characters/player.png"
-const RUNNER_STAGE_SCENE_PATH := "res://scenes/game/RunnerStage.tscn"
+const GAME_SCENE_PATH := "res://scenes/Main.tscn"
 const HOW_TO_SCENE_PATH := "res://scenes/ui/HowToScreen.tscn"
+const CHARACTER_SELECT_SCENE_PATH := "res://scenes/ui/CharacterSelect.tscn"
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -55,9 +56,9 @@ func _build_scene() -> void:
 	var play_button := _make_menu_button("PLAY", Vector2(button_x, button_y), button_size)
 	play_button.pressed.connect(_on_play_pressed)
 	var character_button := _make_menu_button("CHARACTER", Vector2(button_x, button_y + 96.0), button_size)
+	character_button.pressed.connect(_on_character_pressed)
 	var how_to_button := _make_menu_button("HOW TO", Vector2(button_x, button_y + 192.0), button_size)
 	how_to_button.pressed.connect(_on_how_to_pressed)
-	character_button.disabled = true
 
 	var bottom_label := Label.new()
 	bottom_label.name = "StatsLabel"
@@ -81,10 +82,13 @@ func _make_menu_button(text: String, position_value: Vector2, size_value: Vector
 	return button
 
 func _on_play_pressed() -> void:
-	get_tree().change_scene_to_file(RUNNER_STAGE_SCENE_PATH)
+	get_tree().change_scene_to_file(GAME_SCENE_PATH)
 
 func _on_how_to_pressed() -> void:
 	get_tree().change_scene_to_file(HOW_TO_SCENE_PATH)
+
+func _on_character_pressed() -> void:
+	get_tree().change_scene_to_file(CHARACTER_SELECT_SCENE_PATH)
 
 func _load_texture(path: String) -> Texture2D:
 	if ResourceLoader.exists(path, "Texture2D"):

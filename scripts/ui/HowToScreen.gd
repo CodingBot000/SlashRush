@@ -4,7 +4,6 @@ class_name HowToScreen
 const ObjectTypes := preload("res://scripts/data/ObjectTypes.gd")
 
 const MAIN_MENU_SCENE_PATH := "res://scenes/game/MainMenu.tscn"
-const RUNNER_STAGE_SCENE_PATH := "res://scenes/game/RunnerStage.tscn"
 const KNOWN_OBJECT_TYPES := ["enemy_basic", "bomb", "enemy_fast", "enemy_armor", "coin", "fever_orb", "heal"]
 
 const CARD_WIDTH := 282.0
@@ -44,11 +43,36 @@ const CARD_DATA := [
 ]
 
 var card_row: HBoxContainer
+var card_scroll: ScrollContainer
+var scroll_drag_active := false
+var active_touch_index := -1
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_build_scene()
+
+func _input(event: InputEvent) -> void:
+	if card_scroll == null:
+		return
+
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed and _is_position_in_scroll(event.position):
+			scroll_drag_active = true
+		elif not event.pressed and scroll_drag_active:
+			scroll_drag_active = false
+	elif event is InputEventMouseMotion and scroll_drag_active:
+		if (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			_drag_scroll(event.relative.x)
+	elif event is InputEventScreenTouch:
+		if event.pressed and active_touch_index == -1 and _is_position_in_scroll(event.position):
+			active_touch_index = event.index
+			scroll_drag_active = true
+		elif not event.pressed and scroll_drag_active and event.index == active_touch_index:
+			scroll_drag_active = false
+			active_touch_index = -1
+	elif event is InputEventScreenDrag and scroll_drag_active and event.index == active_touch_index:
+		_drag_scroll(event.relative.x)
 
 func _build_scene() -> void:
 	var background := ColorRect.new()
@@ -74,7 +98,6 @@ func _build_scene() -> void:
 
 	layout.add_child(_make_header())
 	layout.add_child(_make_card_scroller())
-	layout.add_child(_make_footer())
 
 func _make_header() -> Control:
 	var header := HBoxContainer.new()
@@ -82,9 +105,18 @@ func _make_header() -> Control:
 	header.custom_minimum_size = Vector2(0.0, 70.0)
 	header.alignment = BoxContainer.ALIGNMENT_CENTER
 
+	var back_button := Button.new()
+	back_button.name = "BackButton"
+	back_button.text = "< BACK"
+	back_button.custom_minimum_size = Vector2(154.0, 54.0)
+	back_button.add_theme_font_size_override("font_size", 20)
+	back_button.pressed.connect(_on_back_pressed)
+	header.add_child(back_button)
+
 	var title := Label.new()
 	title.name = "TitleLabel"
 	title.text = "HOW TO PLAY"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 44)
@@ -94,44 +126,30 @@ func _make_header() -> Control:
 	title.add_theme_constant_override("shadow_offset_y", 3)
 	header.add_child(title)
 
+	var balance_spacer := Control.new()
+	balance_spacer.name = "HeaderRightSpacer"
+	balance_spacer.custom_minimum_size = Vector2(154.0, 54.0)
+	header.add_child(balance_spacer)
+
 	return header
 
 func _make_card_scroller() -> ScrollContainer:
-	var scroll := ScrollContainer.new()
-	scroll.name = "CardScroll"
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	card_scroll = ScrollContainer.new()
+	card_scroll.name = "CardScroll"
+	card_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	card_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	card_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 
 	card_row = HBoxContainer.new()
 	card_row.name = "CardRow"
 	card_row.add_theme_constant_override("separation", 18)
 	card_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	scroll.add_child(card_row)
+	card_scroll.add_child(card_row)
 
 	for card_data in CARD_DATA:
 		card_row.add_child(_make_card(card_data))
 
-	return scroll
-
-func _make_footer() -> Control:
-	var footer := HBoxContainer.new()
-	footer.name = "Footer"
-	footer.custom_minimum_size = Vector2(0.0, 70.0)
-	footer.alignment = BoxContainer.ALIGNMENT_CENTER
-	footer.add_theme_constant_override("separation", 22)
-
-	var back_button := _make_action_button("BACK")
-	back_button.name = "BackButton"
-	back_button.pressed.connect(_on_back_pressed)
-	footer.add_child(back_button)
-
-	var start_button := _make_action_button("START")
-	start_button.name = "StartButton"
-	start_button.pressed.connect(_on_start_pressed)
-	footer.add_child(start_button)
-
-	return footer
+	return card_scroll
 
 func _make_card(data: Dictionary) -> PanelContainer:
 	var accent := Color.html(String(data.get("accent", "#ffffff")))
@@ -300,12 +318,14 @@ func _make_hold_bar(accent: Color) -> ProgressBar:
 
 	return bar
 
-func _make_action_button(text: String) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.custom_minimum_size = Vector2(180.0, 58.0)
-	button.add_theme_font_size_override("font_size", 24)
-	return button
+func _drag_scroll(relative_x: float) -> void:
+	if is_zero_approx(relative_x):
+		return
+	card_scroll.scroll_horizontal = max(0, card_scroll.scroll_horizontal - int(round(relative_x)))
+	get_viewport().set_input_as_handled()
+
+func _is_position_in_scroll(position_value: Vector2) -> bool:
+	return card_scroll.get_global_rect().has_point(position_value)
 
 func _load_target_texture(target: String) -> Texture2D:
 	if not KNOWN_OBJECT_TYPES.has(target):
@@ -331,6 +351,3 @@ func _load_texture(path: String) -> Texture2D:
 
 func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
-
-func _on_start_pressed() -> void:
-	get_tree().change_scene_to_file(RUNNER_STAGE_SCENE_PATH)

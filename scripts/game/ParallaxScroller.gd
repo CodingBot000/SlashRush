@@ -6,10 +6,13 @@ const SEGMENT_COUNT := 5
 const DEFAULT_VIEWPORT_SIZE := Vector2(1280.0, 720.0)
 
 const SKY_TEXTURE_PATH := "res://assets/background/stage1/sky_static.png"
+const CLOUD_TEXTURE_PATH := "res://assets/background/stage1/cloud_01.png"
 const FAR_TEXTURE_PATH := "res://assets/background/stage1/far_mountains_01.png"
 const MID_TEXTURE_PATH := "res://assets/background/stage1/mid_structures_01.png"
 const NEAR_TEXTURE_PATH := "res://assets/background/stage1/near_foreground_01.png"
 const ENABLE_NEAR_FOREGROUND_LAYER := false
+const FAR_LAYER_SCROLL_FACTOR := 0.24
+const CLOUD_SCROLL_FACTOR := 0.0128
 
 var alpha_key_shader: Shader
 
@@ -17,7 +20,8 @@ func setup() -> void:
 	for child in get_children():
 		child.queue_free()
 	_add_sky()
-	_add_image_layer("FarLayer", FAR_TEXTURE_PATH, 0.24, -80, Color.html("#94cbe6"), 350.0, 120.0)
+	_add_cloud_layer()
+	_add_image_layer("FarLayer", FAR_TEXTURE_PATH, FAR_LAYER_SCROLL_FACTOR, -80, Color.html("#94cbe6"), 350.0, 120.0)
 	_add_image_layer("MidLayer", MID_TEXTURE_PATH, 0.58, -60, Color.html("#5c7788"), 430.0, 95.0)
 	if ENABLE_NEAR_FOREGROUND_LAYER:
 		_add_image_layer("NearLayer", NEAR_TEXTURE_PATH, 1.12, -40, Color.html("#2c4a42"), 515.0, 58.0)
@@ -50,6 +54,7 @@ func _add_sky() -> void:
 	sky.centered = false
 	sky.position = Vector2.ZERO
 	sky.z_index = -100
+
 	var viewport_size := _get_viewport_size()
 	var texture_size := texture.get_size()
 	var scale_value: float = max(viewport_size.x / texture_size.x, viewport_size.y / texture_size.y)
@@ -69,6 +74,35 @@ func _add_sky_fallback() -> void:
 		Vector2(-80.0, 720.0)
 	])
 	add_child(sky)
+
+func _add_cloud_layer() -> void:
+	var texture := _load_texture(CLOUD_TEXTURE_PATH)
+	if texture == null:
+		push_warning("Failed to load cloud texture: %s." % CLOUD_TEXTURE_PATH)
+		return
+
+	var layer := Node2D.new()
+	layer.name = "CloudLayer"
+	layer.z_index = -90
+	layer.set_meta("factor", CLOUD_SCROLL_FACTOR)
+	layer.set_meta("uses_sprite_wrap", true)
+	add_child(layer)
+
+	var viewport_size := _get_viewport_size()
+	var texture_size := texture.get_size()
+	var scale_value: float = viewport_size.y / texture_size.y
+	var segment_width: float = texture_size.x * scale_value
+	var segment_count: int = max(3, int(ceil(viewport_size.x / segment_width)) + 2)
+	layer.set_meta("segment_width", segment_width)
+
+	for index in range(segment_count):
+		var cloud := Sprite2D.new()
+		cloud.name = "CloudSegment%d" % index
+		cloud.texture = texture
+		cloud.centered = false
+		cloud.position = Vector2(float(index) * segment_width, 0.0)
+		cloud.scale = Vector2(scale_value, scale_value)
+		layer.add_child(cloud)
 
 func _add_image_layer(layer_name: String, texture_path: String, factor: float, z_value: int, fallback_color: Color, fallback_base_y: float, fallback_height: float) -> void:
 	var texture := _load_texture(texture_path)

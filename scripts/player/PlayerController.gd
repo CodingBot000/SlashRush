@@ -12,22 +12,25 @@ const RUN_ANIMATION_NAME := "run"
 const RUN_ANIMATION_FPS := 12.0
 const IDLE_TEXTURE_PATH := "res://assets/sprites/samurai/idle/player_stand.png"
 const DAMAGE_TEXTURE_PATH := "res://assets/sprites/samurai/damage/player_damage.png"
+const DEAD_TEXTURE_PATH := "res://assets/sprites/samurai/dead/dead.png"
 const SWORD_SHEATH_TEXTURE_PATH := "res://assets/sprites/samurai/run/sword_sheath.png"
 const SWORD_SLASH_TEXTURE_PATH := "res://assets/sprites/samurai/run/sword_slash.png"
-const DAMAGE_DURATION := 0.4
+const DAMAGE_DURATION := GameBalance.PLAYER_HURT_SLOW_DURATION
 const DAMAGE_FLASH_PHASES := 8
 const SPRITE_BASE_OFFSET := Vector2(4.0, 0.0)
+const DEAD_SPRITE_OFFSET := Vector2(34.0, 0.0)
 const SLASH_OFFSET := Vector2(160.0, -55.0)
 const SLASH_SCALE_MULTIPLIER := 1.18
 const LONG_SLASH_SCALE_MULTIPLIER := 1.08
 
-enum MotionState { IDLE, RUN, DAMAGE }
+enum MotionState { IDLE, RUN, DAMAGE, DEAD }
 
 var visual_root: Node2D
 var foot_shadow: Polygon2D
 var run_sprite: AnimatedSprite2D
 var idle_sprite: Sprite2D
 var damage_sprite: Sprite2D
+var dead_sprite: Sprite2D
 var sword_sheath_sprite: Sprite2D
 var sword_slash_sprite: Sprite2D
 var _slash_tween: Tween
@@ -46,6 +49,9 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	if visual_root:
+		if _motion_state == MotionState.DEAD:
+			visual_root.position.y = _base_visual_y
+			return
 		var bob := sin(float(Time.get_ticks_msec()) / 90.0) * 2.5
 		visual_root.position.y = _base_visual_y + bob
 
@@ -63,8 +69,18 @@ func play_idle() -> void:
 	_motion_state = MotionState.IDLE
 	_apply_motion_state()
 
+func play_dead() -> void:
+	if _slash_tween:
+		_slash_tween.kill()
+	if _damage_tween:
+		_damage_tween.kill()
+	_slash_active = false
+	_motion_state = MotionState.DEAD
+	visual_root.modulate = Color.WHITE
+	_apply_motion_state()
+
 func play_slash(strong: bool = false) -> void:
-	if not sword_slash_sprite or _motion_state == MotionState.DAMAGE:
+	if not sword_slash_sprite or _motion_state == MotionState.DAMAGE or _motion_state == MotionState.DEAD:
 		return
 	if _slash_tween:
 		_slash_tween.kill()
@@ -118,6 +134,7 @@ func _build_visual() -> void:
 	if _add_run_animation():
 		_add_static_sprite("IdleSprite", IDLE_TEXTURE_PATH, 0)
 		_add_static_sprite("DamageSprite", DAMAGE_TEXTURE_PATH, 0)
+		_add_static_sprite("DeadSprite", DEAD_TEXTURE_PATH, 0)
 		_add_sword_layers()
 	else:
 		var texture := _find_character_texture()
@@ -132,7 +149,7 @@ func _add_foot_shadow() -> void:
 	foot_shadow.z_index = -10
 	foot_shadow.position = Vector2(10.0, 7.0)
 	foot_shadow.color = Color(0.0, 0.0, 0.0, 0.34)
-	foot_shadow.polygon = _semi_ellipse_points(92.0, 18.0, 30)
+	foot_shadow.polygon = _ellipse_points(92.0, 18.0, 40)
 	add_child(foot_shadow)
 
 func _add_run_animation() -> bool:
@@ -177,13 +194,18 @@ func _add_static_sprite(sprite_name: String, texture_path: String, z_index: int)
 	sprite.name = sprite_name
 	sprite.texture = texture
 	sprite.z_index = z_index
-	_fit_sprite_to_player(sprite, texture)
+	if sprite_name == "DeadSprite":
+		_fit_dead_sprite(sprite, texture)
+	else:
+		_fit_sprite_to_player(sprite, texture)
 	sprite.visible = false
 	visual_root.add_child(sprite)
 	if sprite_name == "IdleSprite":
 		idle_sprite = sprite
 	elif sprite_name == "DamageSprite":
 		damage_sprite = sprite
+	elif sprite_name == "DeadSprite":
+		dead_sprite = sprite
 	return sprite
 
 func _add_sword_layers() -> void:
@@ -218,12 +240,14 @@ func _apply_motion_state() -> void:
 		idle_sprite.visible = _motion_state == MotionState.IDLE
 	if damage_sprite:
 		damage_sprite.visible = _motion_state == MotionState.DAMAGE
+	if dead_sprite:
+		dead_sprite.visible = _motion_state == MotionState.DEAD
 	if _motion_state != MotionState.DAMAGE:
 		visual_root.modulate = Color.WHITE
 	_update_weapon_layers()
 
 func _update_weapon_layers() -> void:
-	var can_show_weapon := _motion_state != MotionState.DAMAGE
+	var can_show_weapon := _motion_state != MotionState.DAMAGE and _motion_state != MotionState.DEAD
 	if sword_sheath_sprite:
 		sword_sheath_sprite.visible = can_show_weapon and _motion_state == MotionState.RUN and not _slash_active
 	if sword_slash_sprite:
@@ -236,6 +260,14 @@ func _fit_sprite_to_player(sprite: Sprite2D, texture: Texture2D) -> void:
 	var fit_scale: float = min(target_width / texture_size.x, target_height / texture_size.y)
 	sprite.scale = Vector2(fit_scale, fit_scale)
 	sprite.position = SPRITE_BASE_OFFSET + Vector2(0.0, -target_height * 0.5)
+
+func _fit_dead_sprite(sprite: Sprite2D, texture: Texture2D) -> void:
+	var texture_size := texture.get_size()
+	var target_width := GameBalance.PLAYER_RENDER_WIDTH * 1.22
+	var target_height := GameBalance.PLAYER_RENDER_HEIGHT * 0.82
+	var fit_scale: float = min(target_width / texture_size.x, target_height / texture_size.y)
+	sprite.scale = Vector2(fit_scale, fit_scale)
+	sprite.position = SPRITE_BASE_OFFSET + DEAD_SPRITE_OFFSET + Vector2(0.0, -texture_size.y * fit_scale * 0.5)
 
 func _add_static_character_sprite(texture: Texture2D) -> void:
 	var sprite := Sprite2D.new()
@@ -320,10 +352,9 @@ func _circle_points(radius: float, point_count: int) -> PackedVector2Array:
 		points.append(Vector2(cos(angle), sin(angle)) * radius)
 	return points
 
-func _semi_ellipse_points(radius_x: float, radius_y: float, point_count: int) -> PackedVector2Array:
+func _ellipse_points(radius_x: float, radius_y: float, point_count: int) -> PackedVector2Array:
 	var points := PackedVector2Array()
-	for index in range(point_count + 1):
-		var t: float = float(index) / float(point_count)
-		var angle: float = PI - PI * t
+	for index in range(point_count):
+		var angle := TAU * float(index) / float(point_count)
 		points.append(Vector2(cos(angle) * radius_x, sin(angle) * radius_y))
 	return points

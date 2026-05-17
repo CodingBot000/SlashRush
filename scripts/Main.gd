@@ -5,13 +5,17 @@ const RUNNER_STAGE_SCENE := preload("res://scenes/game/RunnerStage.tscn")
 const BOSS_STAGE_SCENE := preload("res://scenes/game/BossStage.tscn")
 const GAME_HUD_SCENE := preload("res://scenes/ui/GameHUD.tscn")
 const RESULT_PANEL_SCENE := preload("res://scenes/ui/ResultPanel.tscn")
+const PAUSE_OVERLAY_SCENE := preload("res://scenes/ui/PauseOverlay.tscn")
+const MAIN_MENU_SCENE_PATH := "res://scenes/game/MainMenu.tscn"
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
+const PlayerLifeState := preload("res://scripts/game/PlayerLifeState.gd")
 
 var input_interpreter
 var runner_stage
 var boss_stage
 var game_hud
 var result_panel
+var pause_overlay
 
 var state := "title"
 var current_score := 0
@@ -27,7 +31,7 @@ func _ready() -> void:
 	if _should_start_in_boss():
 		_start_boss_debug()
 	else:
-		_show_title()
+		_start_game()
 
 func _build_nodes() -> void:
 	input_interpreter = INPUT_INTERPRETER_SCRIPT.new()
@@ -59,8 +63,14 @@ func _build_nodes() -> void:
 	result_panel.retry_requested.connect(_start_game)
 	result_panel.quit_requested.connect(_quit_game)
 
+	pause_overlay = PAUSE_OVERLAY_SCENE.instantiate()
+	add_child(pause_overlay)
+	pause_overlay.quit_requested.connect(_quit_game)
+
 func _show_title() -> void:
 	state = "title"
+	pause_overlay.set_gameplay_active(false)
+	input_interpreter.clear_action_blocked_provider()
 	runner_stage.stop_run()
 	runner_stage.visible = false
 	boss_stage.stop_boss()
@@ -70,11 +80,13 @@ func _show_title() -> void:
 
 func _start_game() -> void:
 	state = "runner"
+	pause_overlay.set_gameplay_active(true)
 	current_score = 0
 	current_coins = 0
 	current_hp = GameBalance.STARTING_HP
 	input_interpreter.reset_action_state()
 	input_interpreter.set_fever_mode_active(false)
+	input_interpreter.set_action_blocked_provider(Callable(runner_stage, "is_player_hurt_locked"))
 	boss_stage.stop_boss()
 	boss_stage.visible = false
 	result_panel.hide_panel()
@@ -84,8 +96,10 @@ func _start_game() -> void:
 
 func _start_boss() -> void:
 	state = "boss"
+	pause_overlay.set_gameplay_active(true)
 	input_interpreter.reset_action_state()
 	input_interpreter.set_fever_mode_active(false)
+	input_interpreter.set_action_blocked_provider(Callable(boss_stage, "is_player_hurt_locked"))
 	runner_stage.visible = false
 	result_panel.hide_panel()
 	game_hud.visible = true
@@ -103,11 +117,14 @@ func _start_boss_debug() -> void:
 func _show_result(won: bool) -> void:
 	if state == "result":
 		return
+	var finished_state := state
 	state = "result"
+	pause_overlay.set_gameplay_active(false)
+	input_interpreter.clear_action_blocked_provider()
 	runner_stage.stop_run()
-	runner_stage.visible = false
+	runner_stage.visible = not won and finished_state == "runner"
 	boss_stage.stop_boss()
-	boss_stage.visible = false
+	boss_stage.visible = not won and finished_state == "boss"
 	game_hud.visible = false
 	best_score = max(best_score, current_score)
 	_save_game()
@@ -130,14 +147,12 @@ func _on_runner_stats_changed(score: int, hp: int, combo: int, fever: int, is_fe
 	current_hp = hp
 	input_interpreter.set_fever_mode_active(is_fever)
 	game_hud.update_runner(score, hp, combo, fever, is_fever, coins)
-	if state == "runner" and hp <= 0 and not _is_player_invincible():
-		call_deferred("_show_result", false)
 
 func _on_runner_finished(payload: Dictionary) -> void:
 	current_score = int(payload.get("score", current_score))
 	current_coins = int(payload.get("coins", current_coins))
 	current_hp = int(payload.get("hp", current_hp))
-	if bool(payload.get("cleared", false)) and (current_hp > 0 or _is_player_invincible()):
+	if bool(payload.get("cleared", false)) and PlayerLifeState.can_player_continue(current_hp, _is_player_invincible()):
 		_start_boss()
 	else:
 		_show_result(false)
@@ -160,7 +175,8 @@ func _on_feedback_requested(text: String, color: Color) -> void:
 	game_hud.show_feedback(text, color)
 
 func _quit_game() -> void:
-	get_tree().quit()
+	pause_overlay.set_gameplay_active(false)
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
 
 func _ensure_input_actions() -> void:
 	_add_action_if_missing("tap_action")

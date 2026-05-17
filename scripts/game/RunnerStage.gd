@@ -10,6 +10,7 @@ const INPUT_INTERPRETER_SCRIPT := preload("res://scripts/player/InputInterpreter
 const GAME_HUD_SCENE := preload("res://scenes/ui/GameHUD.tscn")
 const BOSS_STAGE_SCENE := preload("res://scenes/game/BossStage.tscn")
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
+const PlayerLifeState := preload("res://scripts/game/PlayerLifeState.gd")
 const PARALLAX_SCROLLER_SCRIPT := preload("res://scripts/game/ParallaxScroller.gd")
 const GROUND_LOOPER_SCRIPT := preload("res://scripts/game/GroundLooper.gd")
 const OBJECT_SPAWNER_SCRIPT := preload("res://scripts/game/ObjectSpawner.gd")
@@ -45,6 +46,7 @@ var run_elapsed := 0.0
 
 var active := false
 var hitstop_timer := 0.0
+var hurt_slow_timer := 0.0
 var shake_timer := 0.0
 var shake_strength := 0.0
 var _fever_rush_pause_applied := false
@@ -70,7 +72,10 @@ func start_run() -> void:
 	run_elapsed = 0.0
 	active = true
 	hitstop_timer = 0.0
+	hurt_slow_timer = 0.0
 	_fever_rush_pause_applied = false
+	if player and player.has_method("play_run"):
+		player.play_run()
 	fever_mode.reset()
 	_sync_fever_state()
 	if standalone_input_interpreter:
@@ -91,6 +96,8 @@ func stop_run() -> void:
 
 func handle_player_action(action: String) -> void:
 	if not active:
+		return
+	if is_player_hurt_locked():
 		return
 	if action == "tap" or action == "double_tap" or action == "long_tap":
 		player.play_slash(action == "long_tap")
@@ -130,14 +137,15 @@ func _process(delta: float) -> void:
 
 	_update_fever(delta)
 	_update_shake(delta)
+	_update_hurt_slow(delta)
 	if hitstop_timer > 0.0:
 		hitstop_timer -= delta
 		return
 
-	var scroll_multiplier := _get_scroll_speed_multiplier()
+	var scroll_multiplier := _get_scroll_speed_multiplier() * _get_hurt_background_speed_multiplier()
 	parallax.process_scroll(delta, GameBalance.MAP_SCROLL_SPEED * scroll_multiplier)
 	ground.process_scroll(delta, GameBalance.GROUND_SCROLL_SPEED * scroll_multiplier)
-	_move_objects(delta)
+	_move_objects(delta, _get_hurt_object_speed_multiplier())
 
 func _build_scene() -> void:
 	world_root = Node2D.new()
@@ -205,6 +213,7 @@ func _build_standalone_input() -> void:
 	standalone_input_interpreter.double_tap_detected.connect(_handle_standalone_player_action.bind("double_tap"))
 	standalone_input_interpreter.long_tap_detected.connect(_handle_standalone_player_action.bind("long_tap"))
 	standalone_input_interpreter.debug_restart_requested.connect(_restart_standalone_run)
+	standalone_input_interpreter.set_action_blocked_provider(Callable(self, "_is_standalone_player_action_blocked"))
 
 func _build_standalone_hud() -> void:
 	if standalone_hud:
@@ -231,7 +240,7 @@ func _restart_standalone_run() -> void:
 	start_run()
 
 func _on_standalone_run_finished(payload: Dictionary) -> void:
-	if not bool(payload.get("cleared", false)) or (int(payload.get("hp", hp)) <= 0 and not _is_player_invincible()):
+	if not bool(payload.get("cleared", false)) or PlayerLifeState.is_player_dead(int(payload.get("hp", hp)), _is_player_invincible()):
 		return
 	call_deferred("_start_standalone_boss", payload)
 
@@ -267,6 +276,11 @@ func _on_standalone_boss_finished(_payload: Dictionary) -> void:
 func _on_standalone_boss_fever_state_changed(active_value: bool) -> void:
 	if standalone_input_interpreter:
 		standalone_input_interpreter.set_fever_mode_active(active_value)
+
+func _is_standalone_player_action_blocked() -> bool:
+	if standalone_boss_stage and standalone_boss_stage.active and standalone_boss_stage.has_method("is_player_hurt_locked"):
+		return standalone_boss_stage.is_player_hurt_locked()
+	return is_player_hurt_locked()
 
 func _ensure_standalone_input_actions() -> void:
 	_add_action_if_missing("tap_action")
@@ -309,7 +323,8 @@ func _add_action_zone_visual() -> void:
 	var zone := Polygon2D.new()
 	zone.name = "ActionZoneGuide"
 	zone.position = GameBalance.ACTION_ZONE_CENTER
-	zone.color = Color(1.0, 1.0, 1.0, 0.07)
+	zone.z_index = 4096
+	zone.color = Color(1.0, 0.0, 0.0, 0.28)
 	var half: Vector2 = GameBalance.ACTION_ZONE_SIZE * 0.5
 	zone.polygon = PackedVector2Array([
 		Vector2(-half.x, -half.y),
@@ -328,18 +343,20 @@ func _get_spawn_player_hp() -> int:
 func _get_spawn_player_max_hp() -> int:
 	return GameBalance.MAX_HP
 
-func _move_objects(delta: float) -> void:
+func _move_objects(delta: float, speed_multiplier: float = 1.0) -> void:
 	for child in object_root.get_children():
 		if not child.has_method("get_slice_color"):
 			continue
 		var object = child
 		if object.handled:
 			continue
-		object.position.x -= GameBalance.OBJECT_SPEED * delta
+		object.position.x -= GameBalance.OBJECT_SPEED * speed_multiplier * delta
 		if object.position.x < GameBalance.ACTION_ZONE_CENTER.x - GameBalance.ACTION_ZONE_SIZE.x * 0.5 - 70.0:
 			_handle_passed_object(object)
 
 func _handle_fever_player_action() -> void:
+	if is_player_hurt_locked():
+		return
 	var targets := _get_zone_objects()
 	for target in targets:
 		if target.is_good_item:
@@ -397,6 +414,9 @@ func _counts_for_combo(object) -> bool:
 func _success_object(object, automatic: bool, play_player_slash: bool = true) -> void:
 	if object.handled:
 		return
+	if is_player_hurt_locked():
+		_discard_object_during_hurt(object)
+		return
 	object.handled = true
 	object.disable_collision()
 	var multiplier := 2 if _is_runner_fever_active() else 1
@@ -416,22 +436,33 @@ func _success_object(object, automatic: bool, play_player_slash: bool = true) ->
 func _fail_object(object, sliced_wrong: bool) -> void:
 	if object.handled:
 		return
+	if is_player_hurt_locked():
+		_discard_object_during_hurt(object)
+		return
 	object.handled = true
 	combo = 0
 	hp -= object.damage_on_fail
+	var player_dead := PlayerLifeState.is_player_dead(hp, _is_player_invincible())
 	if sliced_wrong:
 		slice_factory.spawn_slice(piece_root, object.get_slice_center_global(), Color.html("#c83f3f"), object.get_slice_size(), false, object.get_slice_texture(), _get_next_slice_cut())
 		_spawn_world_text("MISS!", object.get_slice_center_global() + Vector2(-34.0, -70.0), Color.html("#ff6b6b"))
 	else:
 		_spawn_world_text("-HP", object.get_slice_center_global() + Vector2(-28.0, -70.0), Color.html("#ff6b6b"))
-	player.flash_hurt()
+	if player_dead:
+		PlayerLifeState.show_dead_visual(player)
+	else:
+		player.flash_hurt()
+	_start_hurt_slow()
 	object.queue_free()
 	_start_hitstop(0.04, 5.0)
 	_emit_stats()
-	if hp <= 0 and not _is_player_invincible():
+	if player_dead:
 		_finish_run(false)
 
 func _handle_passed_object(object) -> void:
+	if is_player_hurt_locked():
+		_discard_object_during_hurt(object)
+		return
 	if _is_runner_fever_active():
 		_discard_fever_missed_object(object)
 	elif object.is_good_item:
@@ -445,8 +476,17 @@ func _discard_fever_missed_object(object) -> void:
 	object.handled = true
 	object.queue_free()
 
+func _discard_object_during_hurt(object) -> void:
+	if object.handled:
+		return
+	object.handled = true
+	object.queue_free()
+
 func _collect_good_item(object, automatic: bool) -> void:
 	if object.handled:
+		return
+	if is_player_hurt_locked():
+		_discard_object_during_hurt(object)
 		return
 	object.handled = true
 	if object.object_type == "coin":
@@ -478,6 +518,9 @@ func _collect_fever_sliced_good_item(object) -> void:
 func _collect_good_item_as_fever_coin_bonus(object) -> void:
 	if object.handled:
 		return
+	if is_player_hurt_locked():
+		_discard_object_during_hurt(object)
+		return
 	object.handled = true
 	var coin_bonus := GameBalance.FEVER_GOOD_ITEM_SLICE_COIN_BONUS
 	coins += coin_bonus
@@ -488,6 +531,9 @@ func _collect_good_item_as_fever_coin_bonus(object) -> void:
 
 func _break_good_item(object) -> void:
 	if object.handled:
+		return
+	if is_player_hurt_locked():
+		_discard_object_during_hurt(object)
 		return
 	object.handled = true
 	combo = 0
@@ -589,8 +635,25 @@ func _sync_fever_state() -> void:
 func _is_runner_fever_active() -> bool:
 	return is_fever
 
+func is_player_hurt_locked() -> bool:
+	return active and hurt_slow_timer > 0.0
+
 func _get_scroll_speed_multiplier() -> float:
 	return GameBalance.RUNNER_FEVER_SCROLL_SPEED_MULTIPLIER if _is_runner_fever_active() else 1.0
+
+func _start_hurt_slow() -> void:
+	hurt_slow_timer = max(hurt_slow_timer, GameBalance.PLAYER_HURT_SLOW_DURATION)
+
+func _update_hurt_slow(delta: float) -> void:
+	if hurt_slow_timer <= 0.0:
+		return
+	hurt_slow_timer = max(0.0, hurt_slow_timer - delta)
+
+func _get_hurt_background_speed_multiplier() -> float:
+	return GameBalance.PLAYER_HURT_BACKGROUND_SPEED_MULTIPLIER if hurt_slow_timer > 0.0 else 1.0
+
+func _get_hurt_object_speed_multiplier() -> float:
+	return GameBalance.PLAYER_HURT_OBJECT_SPEED_MULTIPLIER if hurt_slow_timer > 0.0 else 1.0
 
 func _start_hitstop(duration: float, strength: float) -> void:
 	hitstop_timer = max(hitstop_timer, duration)

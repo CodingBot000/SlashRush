@@ -35,7 +35,6 @@ func _run() -> void:
 
 func _assert_runner_fever_lifecycle_and_rush_pause(stage) -> void:
 	stage._gain_runner_fever(GameBalance.FEVER_MAX)
-	await process_frame
 
 	if not stage.is_fever:
 		_fail("Runner fever should start when fever gauge reaches max.")

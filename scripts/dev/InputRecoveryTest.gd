@@ -6,6 +6,7 @@ const GameBalance := preload("res://scripts/data/GameBalance.gd")
 var _tap_count := 0
 var _double_tap_count := 0
 var _long_tap_count := 0
+var _blocked := false
 
 func _init() -> void:
 	call_deferred("_run")
@@ -22,6 +23,7 @@ func _run() -> void:
 	await _assert_recovery_blocks_presses_started_during_recovery(input)
 	await _assert_long_tap_recovery(input)
 	await _assert_fever_ignores_recovery(input)
+	await _assert_blocked_input_has_no_recovery(input)
 
 	input.free()
 	quit()
@@ -95,6 +97,38 @@ func _assert_fever_ignores_recovery(input) -> void:
 		push_error("Fever mode should ignore slash recovery.")
 		quit(1)
 
+func _assert_blocked_input_has_no_recovery(input) -> void:
+	_reset_counts(input)
+	_blocked = true
+	input.set_action_blocked_provider(Callable(self, "_is_input_blocked"))
+	_quick_tap(input)
+	await process_frame
+
+	if _tap_count != 0 or _double_tap_count != 0 or _long_tap_count != 0:
+		push_error("Blocked input should not emit player actions.")
+		quit(1)
+
+	_blocked = false
+	_quick_tap(input)
+	await process_frame
+	if _tap_count != 1:
+		push_error("Blocked input should not start slash recovery.")
+		quit(1)
+
+	_reset_counts(input)
+	input.set_action_blocked_provider(Callable(self, "_is_input_blocked"))
+	input._mark_pressed(false)
+	_blocked = true
+	input._process(0.0)
+	_blocked = false
+	input._mark_released(false)
+	await process_frame
+	if _tap_count != 0 or _double_tap_count != 0 or _long_tap_count != 0:
+		push_error("A press held through blocked input should be discarded.")
+		quit(1)
+
+	input.clear_action_blocked_provider()
+
 func _quick_tap(input) -> void:
 	input._mark_pressed(false)
 	input._mark_released(false)
@@ -105,6 +139,12 @@ func _reset_counts(input) -> void:
 	_long_tap_count = 0
 	input.reset_action_state()
 	input.set_fever_mode_active(false)
+	if input.has_method("clear_action_blocked_provider"):
+		input.clear_action_blocked_provider()
+	_blocked = false
+
+func _is_input_blocked() -> bool:
+	return _blocked
 
 func _ensure_input_actions() -> void:
 	if not InputMap.has_action("tap_action"):
