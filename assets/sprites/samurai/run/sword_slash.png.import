@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bti2ntubhl5op"
-path="res://.godot/imported/frame_06.png-bb3bca2216be91e2094177a9ca831faf.ctex"
+uid="uid://b5lkq7io0nkqy"
+path="res://.godot/imported/sword_slash.png-bca5a70158239ad3e628a12f8a5f90be.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/samurai/run/frame_06.png"
-dest_files=["res://.godot/imported/frame_06.png-bb3bca2216be91e2094177a9ca831faf.ctex"]
+source_file="res://assets/sprites/samurai/run/sword_slash.png"
+dest_files=["res://.godot/imported/sword_slash.png-bca5a70158239ad3e628a12f8a5f90be.ctex"]
 
 [params]
 

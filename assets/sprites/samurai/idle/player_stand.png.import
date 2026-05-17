@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b8s6dxoja2lya"
-path="res://.godot/imported/frame_05.png-ebf3fdfaef1adbf2a9030f3ac3d00113.ctex"
+uid="uid://dunnjrfdqesue"
+path="res://.godot/imported/player_stand.png-e2d296ccb2818043ecbed0fb60c04b73.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/samurai/run/frame_05.png"
-dest_files=["res://.godot/imported/frame_05.png-ebf3fdfaef1adbf2a9030f3ac3d00113.ctex"]
+source_file="res://assets/sprites/samurai/idle/player_stand.png"
+dest_files=["res://.godot/imported/player_stand.png-e2d296ccb2818043ecbed0fb60c04b73.ctex"]
 
 [params]
 
