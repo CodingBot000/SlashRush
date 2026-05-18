@@ -33,11 +33,6 @@ static func play_player_hurt(owner: Node) -> void:
 	if audio_manager != null and audio_manager.has_method("play_player_hurt"):
 		audio_manager.play_player_hurt()
 
-static func set_runner_footsteps_active(owner: Node, active: bool) -> void:
-	var audio_manager := _get_audio_manager(owner)
-	if audio_manager != null and audio_manager.has_method("set_runner_footsteps_active"):
-		audio_manager.set_runner_footsteps_active(active)
-
 static func _get_audio_manager(owner: Node) -> Node:
 	if owner == null:
 		return null

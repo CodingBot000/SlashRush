@@ -8,8 +8,6 @@ const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
 
 var logo: TextureRect
 var start_label: Label
-var cloud_layer: Node2D
-var clouds := []
 var elapsed := 0.0
 var opening_main_menu := false
 
@@ -25,13 +23,6 @@ func _process(delta: float) -> void:
 		logo.scale = Vector2(logo_scale, logo_scale)
 	if start_label:
 		start_label.modulate.a = 0.32 + ((sin(elapsed * 3.2) + 1.0) * 0.34)
-
-	var screen_size := get_viewport_rect().size
-	for cloud_data in clouds:
-		var node: Node2D = cloud_data["node"]
-		node.position.x += float(cloud_data["speed"]) * delta
-		if node.position.x > screen_size.x + 260.0:
-			node.position.x = -260.0
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch and event.pressed:
@@ -52,16 +43,6 @@ func _build_scene() -> void:
 	var screen_size := get_viewport_rect().size
 
 	_add_background()
-
-	cloud_layer = Node2D.new()
-	cloud_layer.name = "CloudLayer"
-	add_child(cloud_layer)
-	_add_cloud(Vector2(80.0, 120.0), 22.0, 1.15)
-	_add_cloud(Vector2(390.0, 92.0), 14.0, 0.85)
-	_add_cloud(Vector2(720.0, 150.0), 18.0, 1.0)
-	_add_cloud(Vector2(1060.0, 105.0), 12.0, 0.78)
-	_add_cloud(Vector2(1180.0, 270.0), 10.0, 0.95)
-	_add_cloud(Vector2(240.0, 300.0), 16.0, 0.72)
 
 	logo = TextureRect.new()
 	logo.name = "Logo"
@@ -86,24 +67,6 @@ func _build_scene() -> void:
 	start_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.82))
 	add_child(start_label)
 
-func _add_cloud(position_value: Vector2, speed: float, scale_value: float) -> void:
-	var cloud := Node2D.new()
-	cloud.name = "Cloud"
-	cloud.position = position_value
-	cloud.scale = Vector2(scale_value, scale_value)
-	cloud_layer.add_child(cloud)
-
-	var color := Color(0.45, 0.50, 0.58, 0.16)
-	_add_cloud_blob(cloud, Vector2(-90.0, 12.0), 78.0, color)
-	_add_cloud_blob(cloud, Vector2(-28.0, -8.0), 96.0, color)
-	_add_cloud_blob(cloud, Vector2(54.0, 8.0), 82.0, color)
-	_add_cloud_blob(cloud, Vector2(126.0, 18.0), 56.0, color)
-
-	clouds.append({
-		"node": cloud,
-		"speed": speed
-	})
-
 func _add_background() -> void:
 	var fallback := ColorRect.new()
 	fallback.name = "DarkBackground"
@@ -124,20 +87,6 @@ func _add_background() -> void:
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	add_child(background)
-
-func _add_cloud_blob(parent: Node2D, position_value: Vector2, radius: float, color: Color) -> void:
-	var blob := Polygon2D.new()
-	blob.position = position_value
-	blob.color = color
-	blob.polygon = _circle_points(radius, 24)
-	parent.add_child(blob)
-
-func _circle_points(radius: float, point_count: int) -> PackedVector2Array:
-	var points := PackedVector2Array()
-	for index in range(point_count):
-		var angle := TAU * float(index) / float(point_count)
-		points.append(Vector2(cos(angle), sin(angle) * 0.44) * radius)
-	return points
 
 func _open_main_menu() -> void:
 	if opening_main_menu:

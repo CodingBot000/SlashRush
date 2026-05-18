@@ -13,7 +13,12 @@ const NEAR_TEXTURE_PATH := "res://assets/background/stage1/near_foreground_01.pn
 const ENABLE_NEAR_FOREGROUND_LAYER := true
 const FAR_LAYER_SCROLL_FACTOR := 0.24
 const CLOUD_SCROLL_FACTOR := 0.0128
-const NEAR_LAYER_Y_OFFSET := -120.0
+const SKY_SCALE_MULTIPLIER := 2.0 / 3.0
+const CLOUD_SCALE_MULTIPLIER := 2.0 / 3.0
+const CLOUD_LAYER_Y_OFFSET := 0.0
+const FAR_LAYER_Y_OFFSET := -120.0 ##  mountain
+const MID_LAYER_Y_OFFSET := -130.0  ##  building
+const NEAR_LAYER_Y_OFFSET := -130.0 ## stone and daenamoo
 
 var alpha_key_shader: Shader
 
@@ -22,8 +27,8 @@ func setup() -> void:
 		child.queue_free()
 	_add_sky()
 	_add_cloud_layer()
-	_add_image_layer("FarLayer", FAR_TEXTURE_PATH, FAR_LAYER_SCROLL_FACTOR, -80, Color.html("#94cbe6"), 350.0, 120.0)
-	_add_image_layer("MidLayer", MID_TEXTURE_PATH, 0.58, -60, Color.html("#5c7788"), 430.0, 95.0)
+	_add_image_layer("FarLayer", FAR_TEXTURE_PATH, FAR_LAYER_SCROLL_FACTOR, -80, Color.html("#94cbe6"), 350.0, 120.0, FAR_LAYER_Y_OFFSET)
+	_add_image_layer("MidLayer", MID_TEXTURE_PATH, 0.58, -60, Color.html("#5c7788"), 430.0, 95.0, MID_LAYER_Y_OFFSET)
 	if ENABLE_NEAR_FOREGROUND_LAYER:
 		_add_image_layer("NearLayer", NEAR_TEXTURE_PATH, 1.12, -40, Color.html("#2c4a42"), 515.0, 58.0, NEAR_LAYER_Y_OFFSET)
 
@@ -49,18 +54,25 @@ func _add_sky() -> void:
 		_add_sky_fallback()
 		return
 
-	var sky := Sprite2D.new()
+	var sky := Node2D.new()
 	sky.name = "Sky"
-	sky.texture = texture
-	sky.centered = false
-	sky.position = Vector2.ZERO
 	sky.z_index = -100
+	add_child(sky)
 
 	var viewport_size := _get_viewport_size()
 	var texture_size := texture.get_size()
-	var scale_value: float = max(viewport_size.x / texture_size.x, viewport_size.y / texture_size.y)
-	sky.scale = Vector2(scale_value, scale_value)
-	add_child(sky)
+	var scale_value: float = max(viewport_size.x / texture_size.x, viewport_size.y / texture_size.y) * SKY_SCALE_MULTIPLIER
+	var segment_width: float = texture_size.x * scale_value
+	var segment_count: int = max(1, int(ceil(viewport_size.x / segment_width)) + 1)
+
+	for index in range(segment_count):
+		var segment := Sprite2D.new()
+		segment.name = "SkySegment%d" % index
+		segment.texture = texture
+		segment.centered = false
+		segment.position = Vector2(float(index) * segment_width, 0.0)
+		segment.scale = Vector2(scale_value, scale_value)
+		sky.add_child(segment)
 
 func _add_sky_fallback() -> void:
 	push_warning("Failed to load sky texture: %s. Falling back to generated sky." % SKY_TEXTURE_PATH)
@@ -91,7 +103,7 @@ func _add_cloud_layer() -> void:
 
 	var viewport_size := _get_viewport_size()
 	var texture_size := texture.get_size()
-	var scale_value: float = viewport_size.y / texture_size.y
+	var scale_value: float = viewport_size.y / texture_size.y * CLOUD_SCALE_MULTIPLIER
 	var segment_width: float = texture_size.x * scale_value
 	var segment_count: int = max(3, int(ceil(viewport_size.x / segment_width)) + 2)
 	layer.set_meta("segment_width", segment_width)
@@ -101,7 +113,7 @@ func _add_cloud_layer() -> void:
 		cloud.name = "CloudSegment%d" % index
 		cloud.texture = texture
 		cloud.centered = false
-		cloud.position = Vector2(float(index) * segment_width, 0.0)
+		cloud.position = Vector2(float(index) * segment_width, CLOUD_LAYER_Y_OFFSET)
 		cloud.scale = Vector2(scale_value, scale_value)
 		layer.add_child(cloud)
 

@@ -13,11 +13,14 @@ const BOSS_STAGE_SCENE := preload("res://scenes/game/BossStage.tscn")
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
 const PlayerLifeState := preload("res://scripts/game/PlayerLifeState.gd")
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
+const HapticHooksScript := preload("res://scripts/haptics/HapticHooks.gd")
 const PARALLAX_SCROLLER_SCRIPT := preload("res://scripts/game/ParallaxScroller.gd")
 const GROUND_LOOPER_SCRIPT := preload("res://scripts/game/GroundLooper.gd")
 const OBJECT_SPAWNER_SCRIPT := preload("res://scripts/game/ObjectSpawner.gd")
 const RUNNER_FEVER_MODE_SCRIPT := preload("res://scripts/game/RunnerFeverMode.gd")
 const SLICE_EFFECT_FACTORY_SCRIPT := preload("res://scripts/objects/SliceEffectFactory.gd")
+const FEVER_IMPACT_OVERLAY_SCRIPT := preload("res://scripts/effects/FeverImpactOverlay.gd")
+const ENABLE_FEVER_IMPACT_OVERLAY := true
 const SLICE_CUT_SEQUENCE_LENGTH := 30
 const SLICE_START_ANGLE_MIN := 240.0
 const SLICE_START_ANGLE_MAX := 270.0
@@ -36,6 +39,7 @@ var ground
 var spawner
 var fever_mode
 var slice_factory
+var fever_impact_overlay
 
 var score := 0
 var coins := 0
@@ -76,6 +80,7 @@ func start_run() -> void:
 	hitstop_timer = 0.0
 	hurt_slow_timer = 0.0
 	_fever_rush_pause_applied = false
+	_set_fever_impact_active(false)
 	if player and player.has_method("play_run"):
 		player.play_run()
 	fever_mode.reset()
@@ -86,13 +91,12 @@ func start_run() -> void:
 	_build_slice_cut_sequence()
 	visible = true
 	spawner.start()
-	_sync_runner_footsteps()
 	_emit_stats()
-	_emit_feedback("TAP / TAP TAP / HOLD", Color(1.0, 1.0, 1.0, 1.0))
+	#_emit_feedback("TAP / TAP TAP / HOLD", Color(1.0, 1.0, 1.0, 1.0))
 
 func stop_run() -> void:
 	active = false
-	_sync_runner_footsteps()
+	_set_fever_impact_active(false)
 	spawner.stop()
 	if fever_mode:
 		fever_mode.reset()
@@ -174,6 +178,8 @@ func _build_scene() -> void:
 	world_root.add_child(ground)
 	ground.setup()
 
+	_add_fever_impact_overlay()
+
 	object_root = Node2D.new()
 	object_root.name = "ObjectRoot"
 	world_root.add_child(object_root)
@@ -206,6 +212,13 @@ func _build_scene() -> void:
 	slice_factory.name = "SliceEffectFactory"
 	add_child(slice_factory)
 
+func _add_fever_impact_overlay() -> void:
+	if not ENABLE_FEVER_IMPACT_OVERLAY:
+		return
+	fever_impact_overlay = FEVER_IMPACT_OVERLAY_SCRIPT.new()
+	fever_impact_overlay.name = "FeverImpactOverlay"
+	world_root.add_child(fever_impact_overlay)
+
 func _start_if_standalone() -> void:
 	if get_tree().current_scene != self:
 		return
@@ -236,6 +249,8 @@ func _build_standalone_hud() -> void:
 	stats_changed.connect(standalone_hud.update_runner)
 	feedback_requested.connect(standalone_hud.show_feedback)
 	combo_increased.connect(standalone_hud.show_combo_impact)
+	standalone_hud.gameplay_pointer_pressed.connect(standalone_input_interpreter.handle_pointer_pressed)
+	standalone_hud.gameplay_pointer_released.connect(standalone_input_interpreter.handle_pointer_released)
 	standalone_hud.show_runner()
 
 func _handle_standalone_player_action(action: String) -> void:
@@ -299,7 +314,7 @@ func _is_standalone_player_action_blocked() -> bool:
 func _ensure_standalone_input_actions() -> void:
 	_add_action_if_missing("tap_action")
 	_add_key_event("tap_action", KEY_SPACE)
-	_add_mouse_event("tap_action", MOUSE_BUTTON_LEFT)
+	_remove_mouse_event("tap_action", MOUSE_BUTTON_LEFT)
 	_add_action_if_missing("debug_restart")
 	_add_key_event("debug_restart", KEY_R)
 
@@ -333,12 +348,18 @@ func _action_has_mouse(action_name: String, button_index: MouseButton) -> bool:
 			return true
 	return false
 
+func _remove_mouse_event(action_name: String, button_index: MouseButton) -> void:
+	for event in InputMap.action_get_events(action_name):
+		if event is InputEventMouseButton and event.button_index == button_index:
+			InputMap.action_erase_event(action_name, event)
+
 func _add_action_zone_visual() -> void:
 	var zone := Polygon2D.new()
 	zone.name = "ActionZoneGuide"
 	zone.position = GameBalance.ACTION_ZONE_CENTER
 	zone.z_index = 4096
 	zone.color = Color(1.0, 0.0, 0.0, 0.28)
+	zone.visible = false
 	var half: Vector2 = GameBalance.ACTION_ZONE_SIZE * 0.5
 	zone.polygon = PackedVector2Array([
 		Vector2(-half.x, -half.y),
@@ -499,6 +520,7 @@ func _fail_object(object, sliced_wrong: bool) -> void:
 	combo = 0
 	hp -= object.damage_on_fail
 	AudioHooksScript.play_player_hurt(self)
+	HapticHooksScript.vibrate_player_hurt(self)
 	var player_dead := PlayerLifeState.is_player_dead(hp, _is_player_invincible())
 	if sliced_wrong:
 		slice_factory.spawn_slice(piece_root, object.get_slice_center_global(), Color.html("#c83f3f"), object.get_slice_size(), false, object.get_slice_texture(), _get_next_slice_cut())
@@ -607,6 +629,11 @@ func _break_good_item(object) -> void:
 func _start_fever() -> void:
 	fever_mode.start()
 
+func debug_fill_fever() -> void:
+	if not active or fever_mode == null:
+		return
+	_gain_runner_fever(GameBalance.FEVER_MAX)
+
 func _update_fever(delta: float) -> void:
 	if not fever_mode:
 		return
@@ -642,6 +669,7 @@ func _penalize_runner_fever(amount: int) -> void:
 func _on_runner_fever_started() -> void:
 	_sync_fever_state()
 	_fever_rush_pause_applied = false
+	_set_fever_impact_active(true)
 	_clear_active_normal_objects()
 	spawner.set_fever_rush_enabled(true)
 	_emit_feedback("FEVER!", Color.html("#5ef3ff"))
@@ -650,6 +678,7 @@ func _on_runner_fever_started() -> void:
 
 func _on_runner_fever_ended() -> void:
 	_sync_fever_state()
+	_set_fever_impact_active(false)
 	spawner.set_fever_rush_enabled(false)
 	spawner.mark_fever_ended()
 	spawner.pause_spawning(GameBalance.FEVER_END_NORMAL_SPAWN_DELAY)
@@ -702,13 +731,11 @@ func _get_scroll_speed_multiplier() -> float:
 
 func _start_hurt_slow() -> void:
 	hurt_slow_timer = max(hurt_slow_timer, GameBalance.PLAYER_HURT_SLOW_DURATION)
-	_sync_runner_footsteps()
 
 func _update_hurt_slow(delta: float) -> void:
 	if hurt_slow_timer <= 0.0:
 		return
 	hurt_slow_timer = max(0.0, hurt_slow_timer - delta)
-	_sync_runner_footsteps()
 
 func _get_hurt_background_speed_multiplier() -> float:
 	return GameBalance.PLAYER_HURT_BACKGROUND_SPEED_MULTIPLIER if hurt_slow_timer > 0.0 else 1.0
@@ -772,9 +799,9 @@ func _is_player_invincible() -> bool:
 	var debug_flags := get_node_or_null("/root/DebugFlags")
 	return debug_flags != null and bool(debug_flags.player_invincible)
 
-func _sync_runner_footsteps() -> void:
-	var player_dead := PlayerLifeState.is_player_dead(hp, _is_player_invincible())
-	AudioHooksScript.set_runner_footsteps_active(self, active and hurt_slow_timer <= 0.0 and not player_dead)
+func _set_fever_impact_active(active_value: bool) -> void:
+	if fever_impact_overlay != null and fever_impact_overlay.has_method("set_active"):
+		fever_impact_overlay.set_active(active_value)
 
 func _spawn_world_text(text: String, pos: Vector2, color: Color, font_size: int = 24, label_size: Vector2 = Vector2(130.0, 40.0), emphasized: bool = false) -> void:
 	var label := Label.new()

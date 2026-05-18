@@ -7,9 +7,12 @@ const INTRO_BACKGROUND_PATH := "res://assets/background/intro/intro_background.p
 const MENU_BUTTON_BACKGROUND_PATH := "res://assets/ui/button_rectangle_depth_flat.png"
 const SETTINGS_ICON_PATH := "res://assets/ui/icon_setting.png"
 const PLAYER_PATH := "res://assets/characters/player1.png"
+const SETTINGS_POPUP_SCENE := preload("res://scenes/ui/SettingsPopup.tscn")
 const GAME_SCENE_PATH := "res://scenes/Main.tscn"
 const HOW_TO_SCENE_PATH := "res://scenes/ui/HowToScreen.tscn"
 const CHARACTER_SELECT_SCENE_PATH := "res://scenes/ui/CharacterSelect.tscn"
+
+var settings_popup
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -20,6 +23,7 @@ func _build_scene() -> void:
 	var screen_size := get_viewport_rect().size
 
 	_add_background()
+	_add_settings_popup()
 
 	var logo := TextureRect.new()
 	logo.name = "LogoSmall"
@@ -89,7 +93,12 @@ func _add_settings_button(position_value: Vector2) -> void:
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		settings_button.add_theme_stylebox_override(state, empty_stylebox)
 	AudioHooksScript.bind_ui_button(self, settings_button)
+	settings_button.pressed.connect(_on_settings_pressed)
 	add_child(settings_button)
+
+func _add_settings_popup() -> void:
+	settings_popup = SETTINGS_POPUP_SCENE.instantiate()
+	add_child(settings_popup)
 
 func _apply_menu_button_background(button: Button) -> void:
 	var texture := _load_texture(MENU_BUTTON_BACKGROUND_PATH)
@@ -132,6 +141,10 @@ func _on_how_to_pressed() -> void:
 
 func _on_character_pressed() -> void:
 	get_tree().change_scene_to_file(CHARACTER_SELECT_SCENE_PATH)
+
+func _on_settings_pressed() -> void:
+	if settings_popup and settings_popup.has_method("open_popup"):
+		settings_popup.open_popup()
 
 func _load_texture(path: String) -> Texture2D:
 	if ResourceLoader.exists(path, "Texture2D"):

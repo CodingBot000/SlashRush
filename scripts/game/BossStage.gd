@@ -12,10 +12,40 @@ const ROBOT_SAMURAI_BOSS_SCENE := preload("res://scenes/boss/RobotSamuraiBoss.ts
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
 const PlayerLifeState := preload("res://scripts/game/PlayerLifeState.gd")
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
+const HapticHooksScript := preload("res://scripts/haptics/HapticHooks.gd")
 const SLICE_EFFECT_FACTORY_SCRIPT := preload("res://scripts/objects/SliceEffectFactory.gd")
 const BOSS_FEVER_MODE_SCRIPT := preload("res://scripts/game/BossFeverMode.gd")
+const FEVER_IMPACT_OVERLAY_SCRIPT := preload("res://scripts/effects/FeverImpactOverlay.gd")
 const BOSS_BACKGROUND_PATH := "res://assets/background/stage1/boss_background.png"
 const BOSS_BACKGROUND_ROTATION_SPEED := 0.05
+const ENABLE_FEVER_IMPACT_OVERLAY := true
+const BOSS_HIT_SCRAP_TEXTURE_PATHS := [
+	"res://assets/boss/robot_samurai/scrap1.png",
+	"res://assets/boss/robot_samurai/scrap2.png",
+	"res://assets/boss/robot_samurai/scrap3.png",
+	"res://assets/boss/robot_samurai/scrap4.png",
+	"res://assets/boss/robot_samurai/scrap5.png",
+	"res://assets/boss/robot_samurai/scrap6.png",
+	"res://assets/boss/robot_samurai/scrap7.png",
+]
+const BOSS_HIT_SLICE_SIZE := Vector2(340.0, 340.0)
+const CIRCLE_CUE_FRAME_PATHS := [
+	"res://assets/ui/circle_01.png",
+	"res://assets/ui/circle_02.png",
+	"res://assets/ui/circle_03.png",
+	"res://assets/ui/circle_04.png",
+	"res://assets/ui/circle_05.png",
+]
+const WAIT_CUE_PATH := "res://assets/ui/window_01.png"
+const BOSS_SLICE_PIECE_Z_INDEX := 14
+const PATTERN_CUE_TARGET_SIZE := Vector2(132.0, 132.0)
+const PATTERN_CUE_SPACING := 150.0
+const PATTERN_TIMER_WIDTH := 400.0
+const PATTERN_TIMER_HEIGHT := 12.0
+const PATTERN_BOTTOM_MARGIN := 72.0
+const PATTERN_CUE_TIMER_GAP := 38.0
+const TAP_CUE_LOOP_SECONDS := 0.8
+const HOLD_CUE_LOOP_SECONDS := 0.2
 
 var player
 var boss_background_fill: ColorRect
@@ -25,8 +55,14 @@ var boss_visual: Node2D
 var piece_root: Node2D
 var slice_factory
 var pattern_label: Label
+var pattern_cue_root: Node2D
 var timer_fill: Polygon2D
 var boss_fever_mode
+var fever_impact_overlay
+var boss_hit_scrap_textures: Array = []
+var boss_hit_scrap_index := 0
+var circle_cue_textures: Array = []
+var wait_cue_texture: Texture2D
 
 var active := false
 var score := 0
@@ -75,17 +111,20 @@ func start_boss(start_score: int, start_coins: int, start_hp: int) -> void:
 	boss_hp = GameBalance.BOSS_MAX_HP
 	boss_combo = 0
 	player_hurt_timer = 0.0
+	_set_fever_impact_active(false)
 	if player and player.has_method("play_run"):
 		player.play_run()
 	_build_phase_pattern_decks()
 	phase1_pattern_index = 0
 	phase2_pattern_index = 0
 	current_phase = BOSS_PHASE_1
+	_shuffle_boss_hit_scraps()
 	boss_fever_mode.reset()
 	if boss_visual:
 		boss_visual.set_process(true)
 	active = true
 	visible = true
+	_hide_pattern_cue()
 	fever_state_changed.emit(false)
 	feedback_requested.emit("BOSS", Color.html("#ffef8a"))
 	_next_pattern()
@@ -94,10 +133,12 @@ func stop_boss() -> void:
 	active = false
 	visible = false
 	player_hurt_timer = 0.0
+	_set_fever_impact_active(false)
 	if boss_fever_mode:
 		boss_fever_mode.reset()
 	if boss_visual:
 		boss_visual.set_process(false)
+	_hide_pattern_cue()
 	fever_state_changed.emit(false)
 
 func handle_player_action(action: String) -> void:
@@ -112,11 +153,11 @@ func handle_player_action(action: String) -> void:
 
 	var required := String(current_pattern["action"])
 	if required == "no_input":
-		_fail_pattern("WAIT!")
+		_fail_pattern("WRONG")
 	elif required == "double_tap" and action == "tap":
-		feedback_requested.emit("TAP TAP", Color.html("#ffd84a"))
+		return
 	elif required == "long_tap" and action == "tap":
-		feedback_requested.emit("HOLD", Color.html("#9ec8ff"))
+		return
 	elif _action_matches(required, action):
 		_success_pattern()
 	else:
@@ -146,9 +187,10 @@ func _process(delta: float) -> void:
 
 func _build_scene() -> void:
 	_add_boss_background()
+	_add_fever_impact_overlay()
 
 	player = PLAYER_SCENE.instantiate()
-	player.position = Vector2(250.0, 500.0)
+	player.position = Vector2(210.0, GameBalance.GAMEPLAY_BASELINE_Y)
 	add_child(player)
 
 	boss_root = Node2D.new()
@@ -168,16 +210,25 @@ func _build_scene() -> void:
 	pattern_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	pattern_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	pattern_label.add_theme_font_size_override("font_size", 58)
+	pattern_label.visible = false
 	add_child(pattern_label)
+
+	_load_pattern_cue_textures()
+	pattern_cue_root = Node2D.new()
+	pattern_cue_root.name = "PatternCueRoot"
+	pattern_cue_root.z_index = 20
+	pattern_cue_root.visible = false
+	add_child(pattern_cue_root)
 
 	timer_fill = Polygon2D.new()
 	timer_fill.name = "TimerFill"
-	timer_fill.position = Vector2(440.0, 360.0)
 	timer_fill.color = Color.html("#f7fbff")
 	add_child(timer_fill)
+	_sync_pattern_prompt_layout(_get_viewport_size())
 
 	piece_root = Node2D.new()
 	piece_root.name = "BossSlicePieceRoot"
+	piece_root.z_index = BOSS_SLICE_PIECE_Z_INDEX
 	add_child(piece_root)
 
 	boss_fever_mode = BOSS_FEVER_MODE_SCRIPT.new()
@@ -188,6 +239,15 @@ func _build_scene() -> void:
 
 	slice_factory = SLICE_EFFECT_FACTORY_SCRIPT.new()
 	add_child(slice_factory)
+
+	_load_boss_hit_scrap_textures()
+
+func _add_fever_impact_overlay() -> void:
+	if not ENABLE_FEVER_IMPACT_OVERLAY:
+		return
+	fever_impact_overlay = FEVER_IMPACT_OVERLAY_SCRIPT.new()
+	fever_impact_overlay.name = "FeverImpactOverlay"
+	add_child(fever_impact_overlay)
 
 func _add_boss_background() -> void:
 	boss_background_fill = ColorRect.new()
@@ -220,12 +280,11 @@ func _next_pattern() -> void:
 	current_pattern = _get_next_phase_pattern(current_phase)
 	pattern_total_time = float(current_pattern["time"])
 	pattern_time_left = pattern_total_time
-	pattern_label.text = String(current_pattern["hint"])
-	pattern_label.add_theme_color_override("font_color", current_pattern["color"])
+	pattern_label.text = ""
 	if _is_boss_fever_active():
-		pattern_label.text = "FEVER"
-		pattern_label.add_theme_color_override("font_color", Color.html("#5ef3ff"))
+		_hide_pattern_cue()
 	else:
+		_show_pattern_cue(String(current_pattern["action"]))
 		_play_boss_pattern_motion(int(current_pattern["code"]))
 	_update_timer_visual(1.0)
 	_emit_boss_stats(1.0)
@@ -298,6 +357,7 @@ func _get_next_phase_pattern(phase: int) -> Dictionary:
 func _success_pattern(from_fever: bool = false) -> void:
 	if not active:
 		return
+	_hide_pattern_cue()
 	boss_hp -= 1
 	score += 400 if from_fever else 200
 	if not from_fever:
@@ -307,7 +367,14 @@ func _success_pattern(from_fever: bool = false) -> void:
 	current_pattern = {}
 	if boss_hp > 0:
 		_play_boss_hit()
-	slice_factory.spawn_slice(piece_root, _get_boss_slice_center(), Color.html("#8a3042"), Vector2(170.0, 170.0), boss_hp <= 0)
+	slice_factory.spawn_slice(
+		piece_root,
+		_get_boss_slice_center(),
+		Color.html("#8a3042"),
+		BOSS_HIT_SLICE_SIZE,
+		boss_hp <= 0,
+		_get_next_boss_hit_scrap_texture()
+	)
 	feedback_requested.emit("HIT", Color.html("#f7fbff"))
 	if boss_hp <= 0:
 		_finish(true)
@@ -327,6 +394,7 @@ func _fail_pattern(text: String) -> void:
 	boss_combo = 0
 	hp -= 1
 	AudioHooksScript.play_player_hurt(self)
+	HapticHooksScript.vibrate_player_hurt(self)
 	var player_dead := PlayerLifeState.is_player_dead(hp, _is_player_invincible())
 	if player_dead:
 		PlayerLifeState.show_dead_visual(player)
@@ -343,6 +411,8 @@ func _finish(won: bool) -> void:
 	if not active:
 		return
 	active = false
+	_set_fever_impact_active(false)
+	_hide_pattern_cue()
 	if won:
 		score += 500
 		feedback_requested.emit("FINISH", Color.html("#ffef8a"))
@@ -379,6 +449,11 @@ func _update_player_hurt(delta: float) -> void:
 func _update_boss_fever(delta: float) -> void:
 	if boss_fever_mode:
 		boss_fever_mode.update(delta)
+
+func debug_fill_fever() -> void:
+	if not active or boss_fever_mode == null:
+		return
+	boss_fever_mode.start()
 
 func _play_boss_pattern_motion(pattern_code: int) -> void:
 	if not boss_visual:
@@ -419,12 +494,14 @@ func _is_boss_fever_active() -> bool:
 	return boss_fever_mode != null and boss_fever_mode.active
 
 func _on_boss_fever_started() -> void:
+	_set_fever_impact_active(true)
 	fever_state_changed.emit(true)
 	feedback_requested.emit("BOSS FEVER!", Color.html("#5ef3ff"))
-	pattern_label.text = "FEVER"
-	pattern_label.add_theme_color_override("font_color", Color.html("#5ef3ff"))
+	pattern_label.text = ""
+	_hide_pattern_cue()
 
 func _on_boss_fever_ended() -> void:
+	_set_fever_impact_active(false)
 	fever_state_changed.emit(false)
 	feedback_requested.emit("BOSS FEVER END", Color.html("#d9f7ff"))
 
@@ -437,29 +514,141 @@ func _emit_boss_stats(time_ratio: float) -> void:
 	var hint := "FEVER" if _is_boss_fever_active() else String(current_pattern["hint"])
 	stats_changed.emit(score, hp, boss_hp, GameBalance.BOSS_MAX_HP, hint, time_ratio)
 
+func _load_boss_hit_scrap_textures() -> void:
+	boss_hit_scrap_textures.clear()
+	for texture_path in BOSS_HIT_SCRAP_TEXTURE_PATHS:
+		var texture := _load_texture(texture_path)
+		if texture:
+			boss_hit_scrap_textures.append(texture)
+	_shuffle_boss_hit_scraps()
+
+func _shuffle_boss_hit_scraps() -> void:
+	randomize()
+	boss_hit_scrap_textures.shuffle()
+	boss_hit_scrap_index = 0
+
+func _get_next_boss_hit_scrap_texture() -> Texture2D:
+	if boss_hit_scrap_textures.is_empty():
+		_load_boss_hit_scrap_textures()
+	if boss_hit_scrap_textures.is_empty():
+		return null
+	var texture: Texture2D = boss_hit_scrap_textures[boss_hit_scrap_index]
+	boss_hit_scrap_index = (boss_hit_scrap_index + 1) % boss_hit_scrap_textures.size()
+	return texture
+
+func _load_pattern_cue_textures() -> void:
+	circle_cue_textures.clear()
+	for frame_path in CIRCLE_CUE_FRAME_PATHS:
+		var texture := _load_texture(frame_path)
+		if texture:
+			circle_cue_textures.append(texture)
+	wait_cue_texture = _load_texture(WAIT_CUE_PATH)
+
+func _show_pattern_cue(action: String) -> void:
+	_hide_pattern_cue()
+	match action:
+		"tap":
+			_add_circle_cues(1, TAP_CUE_LOOP_SECONDS)
+		"double_tap":
+			_add_circle_cues(2, TAP_CUE_LOOP_SECONDS)
+		"long_tap":
+			_add_circle_cues(1, HOLD_CUE_LOOP_SECONDS)
+		"no_input":
+			_add_wait_cue()
+
+	if pattern_cue_root:
+		pattern_cue_root.visible = pattern_cue_root.get_child_count() > 0
+
+func _hide_pattern_cue() -> void:
+	if not pattern_cue_root:
+		return
+	pattern_cue_root.visible = false
+	for child in pattern_cue_root.get_children():
+		if child is CanvasItem:
+			child.visible = false
+		child.queue_free()
+
+func _add_circle_cues(count: int, loop_seconds: float) -> void:
+	if not pattern_cue_root or circle_cue_textures.is_empty():
+		return
+	var total_width := float(count - 1) * PATTERN_CUE_SPACING
+	for index in range(count):
+		var sprite := AnimatedSprite2D.new()
+		sprite.name = "CircleCue%d" % (index + 1)
+		sprite.sprite_frames = _make_circle_cue_frames(loop_seconds)
+		sprite.animation = "pulse"
+		sprite.centered = true
+		sprite.position = Vector2(float(index) * PATTERN_CUE_SPACING - total_width * 0.5, 0.0)
+		sprite.scale = _get_cue_texture_scale(circle_cue_textures[0])
+		pattern_cue_root.add_child(sprite)
+		sprite.play("pulse")
+
+func _make_circle_cue_frames(loop_seconds: float) -> SpriteFrames:
+	var frames := SpriteFrames.new()
+	frames.add_animation("pulse")
+	frames.set_animation_loop("pulse", true)
+	frames.set_animation_speed("pulse", float(circle_cue_textures.size()) / maxf(loop_seconds, 0.01))
+	for texture in circle_cue_textures:
+		frames.add_frame("pulse", texture)
+	return frames
+
+func _add_wait_cue() -> void:
+	if not pattern_cue_root or wait_cue_texture == null:
+		return
+	var sprite := Sprite2D.new()
+	sprite.name = "WaitCue"
+	sprite.texture = wait_cue_texture
+	sprite.centered = true
+	sprite.scale = _get_cue_texture_scale(wait_cue_texture)
+	pattern_cue_root.add_child(sprite)
+
+func _get_cue_texture_scale(texture: Texture2D) -> Vector2:
+	if texture == null:
+		return Vector2.ONE
+	var texture_size := texture.get_size()
+	if texture_size.x <= 0.0 or texture_size.y <= 0.0:
+		return Vector2.ONE
+	var fit_scale: float = min(PATTERN_CUE_TARGET_SIZE.x / texture_size.x, PATTERN_CUE_TARGET_SIZE.y / texture_size.y)
+	return Vector2(fit_scale, fit_scale)
+
 func _get_boss_slice_center() -> Vector2:
 	if boss_visual and boss_visual.has_method("get_core_global_position"):
 		return boss_visual.call("get_core_global_position")
 	return boss_root.global_position + Vector2(-20.0, -120.0)
 
 func _update_timer_visual(ratio: float) -> void:
-	var width := 400.0 * ratio
+	var width := PATTERN_TIMER_WIDTH * ratio
 	timer_fill.polygon = PackedVector2Array([
 		Vector2(0.0, 0.0),
 		Vector2(width, 0.0),
-		Vector2(width, 12.0),
-		Vector2(0.0, 12.0)
+		Vector2(width, PATTERN_TIMER_HEIGHT),
+		Vector2(0.0, PATTERN_TIMER_HEIGHT)
 	])
 
 func _update_boss_background_layout() -> void:
-	var viewport_size := get_viewport_rect().size
-	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
-		viewport_size = Vector2(1280.0, 720.0)
+	var viewport_size := _get_viewport_size()
 	if boss_background_fill:
 		boss_background_fill.position = Vector2.ZERO
 		boss_background_fill.size = viewport_size
 	if boss_background_sprite:
 		boss_background_sprite.position = viewport_size * 0.5
+	_sync_pattern_prompt_layout(viewport_size)
+
+func _sync_pattern_prompt_layout(viewport_size: Vector2) -> void:
+	var timer_y := viewport_size.y - PATTERN_BOTTOM_MARGIN - PATTERN_TIMER_HEIGHT
+	if timer_fill:
+		timer_fill.position = Vector2((viewport_size.x - PATTERN_TIMER_WIDTH) * 0.5, timer_y)
+	if pattern_cue_root:
+		pattern_cue_root.position = Vector2(
+			viewport_size.x * 0.5,
+			timer_y - PATTERN_CUE_TIMER_GAP - PATTERN_CUE_TARGET_SIZE.y * 0.5
+		)
+
+func _get_viewport_size() -> Vector2:
+	var viewport_size := get_viewport_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		viewport_size = Vector2(1280.0, 720.0)
+	return viewport_size
 
 func _load_texture(path: String) -> Texture2D:
 	if ResourceLoader.exists(path, "Texture2D"):
@@ -479,3 +668,7 @@ func _clear_children(node: Node) -> void:
 func _is_player_invincible() -> bool:
 	var debug_flags := get_node_or_null("/root/DebugFlags")
 	return debug_flags != null and bool(debug_flags.player_invincible)
+
+func _set_fever_impact_active(active_value: bool) -> void:
+	if fever_impact_overlay != null and fever_impact_overlay.has_method("set_active"):
+		fever_impact_overlay.set_active(active_value)

@@ -59,6 +59,9 @@ func _build_nodes() -> void:
 
 	game_hud = GAME_HUD_SCENE.instantiate()
 	add_child(game_hud)
+	game_hud.debug_fever_fill_requested.connect(_on_debug_fever_fill_requested)
+	game_hud.gameplay_pointer_pressed.connect(input_interpreter.handle_pointer_pressed)
+	game_hud.gameplay_pointer_released.connect(input_interpreter.handle_pointer_released)
 
 	result_panel = RESULT_PANEL_SCENE.instantiate()
 	add_child(result_panel)
@@ -191,6 +194,15 @@ func _on_feedback_requested(text: String, color: Color) -> void:
 func _on_combo_increased(combo: int) -> void:
 	game_hud.show_combo_impact(combo)
 
+func _on_debug_fever_fill_requested() -> void:
+	match state:
+		"runner":
+			if runner_stage and runner_stage.has_method("debug_fill_fever"):
+				runner_stage.debug_fill_fever()
+		"boss":
+			if boss_stage and boss_stage.has_method("debug_fill_fever"):
+				boss_stage.debug_fill_fever()
+
 func _quit_game() -> void:
 	pause_overlay.set_gameplay_active(false)
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
@@ -222,7 +234,7 @@ func _get_dead_overlay_data(finished_state: String, won: bool) -> Dictionary:
 func _ensure_input_actions() -> void:
 	_add_action_if_missing("tap_action")
 	_add_key_event("tap_action", KEY_SPACE)
-	_add_mouse_event("tap_action", MOUSE_BUTTON_LEFT)
+	_remove_mouse_event("tap_action", MOUSE_BUTTON_LEFT)
 
 	_add_action_if_missing("alt_slice")
 	_add_mouse_event("alt_slice", MOUSE_BUTTON_RIGHT)
@@ -261,6 +273,11 @@ func _action_has_mouse(action_name: String, button_index: MouseButton) -> bool:
 		if event is InputEventMouseButton and event.button_index == button_index:
 			return true
 	return false
+
+func _remove_mouse_event(action_name: String, button_index: MouseButton) -> void:
+	for event in InputMap.action_get_events(action_name):
+		if event is InputEventMouseButton and event.button_index == button_index:
+			InputMap.action_erase_event(action_name, event)
 
 func _load_save() -> void:
 	var config := ConfigFile.new()

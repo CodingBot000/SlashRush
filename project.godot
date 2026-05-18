@@ -20,13 +20,16 @@ config/features=PackedStringArray("4.6")
 
 [autoload]
 
+GameSettings="*res://scripts/settings/GameSettings.gd"
 AudioManager="*res://scripts/audio/AudioManager.gd"
+HapticManager="*res://scripts/haptics/HapticManager.gd"
 DebugFlags="*res://scripts/data/DebugFlags.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
+window/handheld/orientation=0
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
@@ -34,3 +37,4 @@ window/stretch/aspect="expand"
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true

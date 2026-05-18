@@ -19,19 +19,16 @@ var _action_blocked_provider := Callable()
 func _process(_delta: float) -> void:
 	if _is_action_blocked():
 		_clear_current_press()
-	if Input.is_action_just_pressed("tap_action"):
-		_mark_pressed(false)
-	if Input.is_action_just_released("tap_action"):
-		_mark_released(false)
-	if Input.is_action_just_pressed("debug_restart"):
-		debug_restart_requested.emit()
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch:
-		if event.pressed:
-			_mark_pressed(true)
-		else:
-			_mark_released(true)
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and not event.echo:
+		if event.physical_keycode == KEY_SPACE:
+			if event.pressed:
+				_mark_pressed(false)
+			else:
+				_mark_released(false)
+		elif event.physical_keycode == KEY_R and event.pressed:
+			debug_restart_requested.emit()
 
 func reset_action_state() -> void:
 	_press_started_at = -1.0
@@ -44,12 +41,19 @@ func set_fever_mode_active(active: bool) -> void:
 	_fever_mode_active = active
 	if active:
 		_slash_recovery_until = -10.0
+		_press_started_in_recovery = false
 
 func set_action_blocked_provider(provider: Callable) -> void:
 	_action_blocked_provider = provider
 
 func clear_action_blocked_provider() -> void:
 	_action_blocked_provider = Callable()
+
+func handle_pointer_pressed(from_touch: bool) -> void:
+	_mark_pressed(from_touch)
+
+func handle_pointer_released(from_touch: bool) -> void:
+	_mark_released(from_touch)
 
 func _mark_pressed(from_touch: bool) -> void:
 	if _is_action_blocked():

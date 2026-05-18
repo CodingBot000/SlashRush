@@ -14,12 +14,6 @@ func _run() -> void:
 	if audio_manager.ui_button_click_player.stream == null:
 		_fail("AudioManager should load the UI button click sound.")
 		return
-	if audio_manager.runner_footstep_player == null:
-		_fail("AudioManager should create a runner footstep audio player.")
-		return
-	if audio_manager.runner_footstep_player.stream == null:
-		_fail("AudioManager should load the runner footstep sound.")
-		return
 	if audio_manager.start_game_player == null or audio_manager.start_game_player.stream == null:
 		_fail("AudioManager should load the start game sound.")
 		return

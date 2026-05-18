@@ -3,6 +3,7 @@ class_name PlayerController
 
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
+const HapticHooksScript := preload("res://scripts/haptics/HapticHooks.gd")
 const RUN_FRAME_PATHS := [
 	"res://assets/sprites/samurai/run/frame_01.png",
 	"res://assets/sprites/samurai/run/frame_02.png",
@@ -20,7 +21,8 @@ const DAMAGE_DURATION := GameBalance.PLAYER_HURT_SLOW_DURATION
 const DAMAGE_FLASH_PHASES := 8
 const SPRITE_BASE_OFFSET := Vector2(4.0, 0.0)
 const DEAD_SPRITE_OFFSET := Vector2(34.0, 0.0)
-const SLASH_OFFSET := Vector2(160.0, -55.0)
+const SLASH_OFFSET := Vector2(190.0, -40.0)
+const SLASH_ROTATION_DEGREES := 20.0
 const SLASH_SCALE_MULTIPLIER := 1.18
 const LONG_SLASH_SCALE_MULTIPLIER := 1.08
 
@@ -88,6 +90,7 @@ func play_slash(strong: bool = false) -> void:
 
 	_slash_active = true
 	AudioHooksScript.play_sword_slash(self)
+	HapticHooksScript.vibrate_attack(self)
 	_update_weapon_layers()
 	sword_slash_sprite.scale = _slash_base_scale * (LONG_SLASH_SCALE_MULTIPLIER if strong else 1.0)
 	sword_slash_sprite.visible = true
@@ -227,6 +230,7 @@ func _add_sword_layers() -> void:
 		sword_slash_sprite.name = "SwordSlash"
 		sword_slash_sprite.texture = slash_texture
 		sword_slash_sprite.position = _sprite_base_position + SLASH_OFFSET
+		sword_slash_sprite.rotation_degrees = SLASH_ROTATION_DEGREES
 		sword_slash_sprite.scale = _run_base_scale * SLASH_SCALE_MULTIPLIER
 		sword_slash_sprite.z_index = -1
 		sword_slash_sprite.visible = false

@@ -23,6 +23,7 @@ func _run() -> void:
 	await _assert_recovery_blocks_presses_started_during_recovery(input)
 	await _assert_long_tap_recovery(input)
 	await _assert_fever_ignores_recovery(input)
+	await _assert_fever_activation_clears_existing_recovery(input)
 	await _assert_blocked_input_has_no_recovery(input)
 
 	input.free()
@@ -95,6 +96,19 @@ func _assert_fever_ignores_recovery(input) -> void:
 
 	if _long_tap_count != 1 or _tap_count != 1:
 		push_error("Fever mode should ignore slash recovery.")
+		quit(1)
+
+func _assert_fever_activation_clears_existing_recovery(input) -> void:
+	_reset_counts(input)
+	_quick_tap(input)
+	await create_timer(0.05).timeout
+	input._mark_pressed(false)
+	input.set_fever_mode_active(true)
+	input._mark_released(false)
+	await process_frame
+
+	if _tap_count + _double_tap_count + _long_tap_count != 2:
+		push_error("Entering fever mode should clear active slash recovery immediately.")
 		quit(1)
 
 func _assert_blocked_input_has_no_recovery(input) -> void:

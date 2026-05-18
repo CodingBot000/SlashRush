@@ -11,11 +11,8 @@ func _run() -> void:
 	if audio_manager == null:
 		_fail("AudioManager autoload should exist.")
 		return
-	if audio_manager.runner_footstep_player == null:
-		_fail("AudioManager should create a runner footstep audio player.")
-		return
-	if audio_manager.runner_footstep_player.stream == null:
-		_fail("AudioManager should load the runner footstep sound.")
+	if audio_manager.find_child("RunnerFootstepAudio", false, false) != null:
+		_fail("AudioManager should not create runner footstep audio.")
 		return
 
 	var stage = RUNNER_STAGE_SCENE.instantiate()
@@ -25,26 +22,26 @@ func _run() -> void:
 	stage.start_run()
 	stage.spawner.stop()
 	await process_frame
-	if not audio_manager.runner_footstep_player.playing:
-		_fail("Runner footstep audio should play while RunStage is active.")
+	if audio_manager.find_child("RunnerFootstepAudio", false, false) != null:
+		_fail("Runner footstep audio should not be created while RunStage is active.")
 		return
 
 	stage._start_hurt_slow()
 	await process_frame
-	if audio_manager.runner_footstep_player.playing:
-		_fail("Runner footstep audio should stop while the player is hurt.")
+	if audio_manager.find_child("RunnerFootstepAudio", false, false) != null:
+		_fail("Runner footstep audio should not be created while the player is hurt.")
 		return
 
 	stage._update_hurt_slow(GameBalance.PLAYER_HURT_SLOW_DURATION)
 	await process_frame
-	if not audio_manager.runner_footstep_player.playing:
-		_fail("Runner footstep audio should resume after hurt recovery.")
+	if audio_manager.find_child("RunnerFootstepAudio", false, false) != null:
+		_fail("Runner footstep audio should not resume after hurt recovery.")
 		return
 
 	stage.stop_run()
 	await process_frame
-	if audio_manager.runner_footstep_player.playing:
-		_fail("Runner footstep audio should stop when RunStage stops.")
+	if audio_manager.find_child("RunnerFootstepAudio", false, false) != null:
+		_fail("Runner footstep audio should remain absent when RunStage stops.")
 		return
 
 	stage.queue_free()
