@@ -26,8 +26,12 @@ func _run() -> void:
 	if fever_button == null:
 		_fail("GameHUD should create a temporary debug fever fill button.")
 		return
-	if not button.visible:
-		_fail("Debug invincible button should be visible during gameplay HUD.")
+	var warning_label = hud.find_child("InvincibleDebugWarningLabel", true, false)
+	if warning_label == null:
+		_fail("GameHUD should create an invincible debug warning label.")
+		return
+	if button.visible:
+		_fail("Debug invincible button should stay hidden during gameplay HUD.")
 		return
 	if fever_button.visible:
 		_fail("Debug fever fill button should stay hidden during gameplay HUD.")
@@ -38,25 +42,33 @@ func _run() -> void:
 	if fever_button.text != "FEVER FILL":
 		_fail("Debug fever fill button should show its fill label.")
 		return
-
-	button.emit_signal("toggled", true)
-	await process_frame
-	if not debug_flags.player_invincible or button.text != "무적 ON":
-		_fail("Debug invincible button should enable player invincibility.")
+	if warning_label.visible:
+		_fail("Invincible debug warning should stay hidden while invincible debug is off.")
 		return
 
-	button.emit_signal("toggled", false)
+	debug_flags.player_invincible = true
+	hud.show_runner()
 	await process_frame
-	if debug_flags.player_invincible or button.text != "무적 OFF":
-		_fail("Debug invincible button should disable player invincibility.")
+	if not warning_label.visible:
+		_fail("Invincible debug warning should show while invincible debug is on.")
+		return
+	if warning_label.text != "무적디버그 사용중":
+		_fail("Invincible debug warning should show the expected warning text.")
+		return
+	if warning_label.get_theme_color("font_color").r < 0.9:
+		_fail("Invincible debug warning should use red text.")
+		return
+
+	debug_flags.player_invincible = false
+	hud.show_runner()
+	await process_frame
+	if warning_label.visible:
+		_fail("Invincible debug warning should hide again when invincible debug is off.")
 		return
 
 	var viewport_width := root.get_visible_rect().size.x
-	if button.position.x + button.size.x > viewport_width or button.position.x < viewport_width - 140.0:
-		_fail("Debug invincible button should stay at the right edge of the gameplay screen.")
-		return
-	if fever_button.position.y <= button.position.y:
-		_fail("Debug fever fill button should be placed below the invincible button.")
+	if warning_label.position.x + warning_label.size.x > viewport_width or warning_label.position.x < viewport_width - 290.0:
+		_fail("Invincible debug warning should stay at the top-right edge of the gameplay screen.")
 		return
 
 	hud.queue_free()

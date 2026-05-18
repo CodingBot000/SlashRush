@@ -3,6 +3,7 @@ class_name SettingsPopup
 
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
 const GAME_SETTINGS_PATH := "/root/GameSettings"
+const DEBUG_FLAGS_PATH := "/root/DebugFlags"
 
 var root: Control
 var dim: ColorRect
@@ -12,6 +13,7 @@ var volume_value_label: Label
 var volume_slider: HSlider
 var attack_vibration_toggle: CheckButton
 var player_hurt_vibration_toggle: CheckButton
+var invincible_debug_toggle: CheckButton
 var close_button: Button
 var _syncing_controls := false
 
@@ -48,7 +50,7 @@ func _build_ui() -> void:
 
 	panel = PanelContainer.new()
 	panel.name = "SettingsPanel"
-	panel.size = Vector2(560.0, 420.0)
+	panel.size = Vector2(560.0, 500.0)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.add_child(panel)
 
@@ -62,7 +64,7 @@ func _build_ui() -> void:
 	var content := VBoxContainer.new()
 	content.name = "Content"
 	content.alignment = BoxContainer.ALIGNMENT_CENTER
-	content.add_theme_constant_override("separation", 22)
+	content.add_theme_constant_override("separation", 18)
 	content.set_anchors_preset(Control.PRESET_FULL_RECT)
 	content.offset_left = 36.0
 	content.offset_top = 30.0
@@ -106,6 +108,11 @@ func _build_ui() -> void:
 	player_hurt_vibration_toggle.toggled.connect(_on_player_hurt_vibration_toggled)
 	content.add_child(player_hurt_vibration_toggle)
 
+	invincible_debug_toggle = _make_toggle("무적 (게임테스트용)")
+	AudioHooksScript.bind_ui_button(self, invincible_debug_toggle)
+	invincible_debug_toggle.toggled.connect(_on_invincible_debug_toggled)
+	content.add_child(invincible_debug_toggle)
+
 	close_button = Button.new()
 	close_button.name = "CloseButton"
 	close_button.text = "CLOSE"
@@ -146,16 +153,19 @@ func _bind_settings() -> void:
 	settings.player_hurt_vibration_changed.connect(_on_settings_player_hurt_vibration_changed)
 
 func _sync_from_settings() -> void:
-	var settings = _get_game_settings()
-	if settings == null:
-		return
 	_syncing_controls = true
-	volume_slider.value = float(settings.volume_percent)
-	volume_value_label.text = "%d" % int(settings.volume_percent)
-	attack_vibration_toggle.button_pressed = bool(settings.attack_vibration_enabled)
-	player_hurt_vibration_toggle.button_pressed = bool(settings.player_hurt_vibration_enabled)
-	_update_toggle_text(attack_vibration_toggle, "공격진동", attack_vibration_toggle.button_pressed)
-	_update_toggle_text(player_hurt_vibration_toggle, "피격시진동", player_hurt_vibration_toggle.button_pressed)
+	var settings = _get_game_settings()
+	if settings != null:
+		volume_slider.value = float(settings.volume_percent)
+		volume_value_label.text = "%d" % int(settings.volume_percent)
+		attack_vibration_toggle.button_pressed = bool(settings.attack_vibration_enabled)
+		player_hurt_vibration_toggle.button_pressed = bool(settings.player_hurt_vibration_enabled)
+		_update_toggle_text(attack_vibration_toggle, "공격진동", attack_vibration_toggle.button_pressed)
+		_update_toggle_text(player_hurt_vibration_toggle, "피격시진동", player_hurt_vibration_toggle.button_pressed)
+	var debug_flags := _get_debug_flags()
+	var invincible_enabled := debug_flags != null and bool(debug_flags.player_invincible)
+	invincible_debug_toggle.button_pressed = invincible_enabled
+	_update_toggle_text(invincible_debug_toggle, "무적 (게임테스트용)", invincible_enabled)
 	_syncing_controls = false
 
 func _sync_layout() -> void:
@@ -196,6 +206,14 @@ func _on_player_hurt_vibration_toggled(enabled: bool) -> void:
 	if settings != null and settings.has_method("set_player_hurt_vibration_enabled"):
 		settings.set_player_hurt_vibration_enabled(enabled)
 
+func _on_invincible_debug_toggled(enabled: bool) -> void:
+	_update_toggle_text(invincible_debug_toggle, "무적 (게임테스트용)", enabled)
+	if _syncing_controls:
+		return
+	var debug_flags := _get_debug_flags()
+	if debug_flags != null:
+		debug_flags.player_invincible = enabled
+
 func _on_settings_volume_changed(value: int) -> void:
 	if volume_slider == null:
 		return
@@ -222,3 +240,6 @@ func _update_toggle_text(toggle: CheckButton, label_text: String, enabled: bool)
 
 func _get_game_settings() -> Node:
 	return get_node_or_null(GAME_SETTINGS_PATH)
+
+func _get_debug_flags() -> Node:
+	return get_node_or_null(DEBUG_FLAGS_PATH)

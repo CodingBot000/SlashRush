@@ -11,9 +11,11 @@ const COMBO_IMPACT_POPUP_SCRIPT := preload("res://scripts/ui/ComboImpactPopup.gd
 const HEART_DISPLAY_SCRIPT := preload("res://scripts/ui/HeartDisplay.gd")
 const HUD_TEXT_OUTLINE_SIZE := 5
 const HUD_TEXT_OUTLINE_COLOR := Color(0.0, 0.0, 0.0, 0.88)
+const DEBUG_INVINCIBLE_BUTTON_VISIBLE := false
 const DEBUG_FEVER_FILL_VISIBLE := false
 const FEVER_TAP_LABEL_SIZE := Vector2(500.0, 150.0)
 const FEVER_TAP_LABEL_Y_RATIO := 0.2
+const INVINCIBLE_DEBUG_WARNING_TEXT := "무적디버그 사용중"
 
 var root: Control
 var gameplay_touch_area: Control
@@ -30,6 +32,7 @@ var boss_fill: ColorRect
 var boss_label: Label
 var feedback_label: Label
 var fever_tap_label: Label
+var invincible_debug_warning_label: Label
 var combo_popup
 var boss_timer_back: ColorRect
 var boss_timer_fill: ColorRect
@@ -67,6 +70,7 @@ func show_boss() -> void:
 	_set_fever_tap_visible(false)
 
 func update_runner(score: int, hp: int, combo: int, fever: int, is_fever: bool, coins: int) -> void:
+	_sync_debug_invincible_button()
 	score_label.text = "SCORE %06d" % score
 	_set_hp_hearts(hp)
 	combo_label.text = "COMBO %d" % combo
@@ -79,6 +83,7 @@ func update_runner(score: int, hp: int, combo: int, fever: int, is_fever: bool, 
 	_set_fever_tap_visible(is_fever)
 
 func update_boss(score: int, hp: int, boss_hp: int, max_boss_hp: int, _pattern_hint: String, time_ratio: float) -> void:
+	_sync_debug_invincible_button()
 	score_label.text = "SCORE %06d" % score
 	_set_hp_hearts(hp)
 	combo_label.text = ""
@@ -149,6 +154,13 @@ func _build_ui() -> void:
 	var fever_label := _make_label(Vector2(786.0, 50.0), Vector2(260.0, 24.0), 15, Color(1.0, 1.0, 1.0, 0.72))
 	fever_label.text = "FEVER"
 
+	invincible_debug_warning_label = _make_label(Vector2.ZERO, Vector2(260.0, 24.0), 18, Color.html("#ff2f3a"))
+	invincible_debug_warning_label.name = "InvincibleDebugWarningLabel"
+	invincible_debug_warning_label.text = INVINCIBLE_DEBUG_WARNING_TEXT
+	invincible_debug_warning_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	invincible_debug_warning_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	invincible_debug_warning_label.visible = false
+
 	boss_back = _make_rect(Vector2(956.0, 84.0), Vector2(304.0, 20.0), Color(0.0, 0.0, 0.0, 0.38))
 	boss_fill = _make_rect(Vector2(958.0, 86.0), Vector2(300.0, 16.0), Color.html("#ff5b6d"))
 	boss_label = _make_label(Vector2(956.0, 108.0), Vector2(304.0, 28.0), 18, Color(1.0, 1.0, 1.0, 0.85))
@@ -181,6 +193,7 @@ func _build_ui() -> void:
 	debug_invincible_button.toggle_mode = true
 	debug_invincible_button.focus_mode = Control.FOCUS_NONE
 	debug_invincible_button.size = Vector2(108.0, 46.0)
+	debug_invincible_button.visible = DEBUG_INVINCIBLE_BUTTON_VISIBLE
 	debug_invincible_button.add_theme_font_size_override("font_size", 18)
 	AudioHooksScript.bind_ui_button(self, debug_invincible_button)
 	debug_invincible_button.toggled.connect(_on_debug_invincible_toggled)
@@ -262,6 +275,8 @@ func _sync_debug_buttons_layout() -> void:
 		gameplay_touch_area.position = Vector2.ZERO
 		gameplay_touch_area.size = viewport_size
 	_sync_fever_tap_layout(viewport_size)
+	if invincible_debug_warning_label:
+		invincible_debug_warning_label.position = Vector2(viewport_size.x - invincible_debug_warning_label.size.x - 16.0, 0.0)
 	if not debug_invincible_button:
 		return
 	debug_invincible_button.position = Vector2(viewport_size.x - debug_invincible_button.size.x - 8.0, viewport_size.y * 0.5 - debug_invincible_button.size.y * 0.5)
@@ -287,6 +302,7 @@ func _sync_debug_invincible_button() -> void:
 	debug_invincible_button.button_pressed = enabled
 	_syncing_debug_invincible_button = false
 	_update_debug_invincible_button_text(enabled)
+	_update_invincible_debug_warning(enabled)
 
 func _on_debug_invincible_toggled(enabled: bool) -> void:
 	_update_debug_invincible_button_text(enabled)
@@ -295,10 +311,15 @@ func _on_debug_invincible_toggled(enabled: bool) -> void:
 	var debug_flags := _get_debug_flags()
 	if debug_flags != null:
 		debug_flags.player_invincible = enabled
+	_update_invincible_debug_warning(enabled)
 
 func _update_debug_invincible_button_text(enabled: bool) -> void:
 	if debug_invincible_button:
 		debug_invincible_button.text = "무적 %s" % ("ON" if enabled else "OFF")
+
+func _update_invincible_debug_warning(enabled: bool) -> void:
+	if invincible_debug_warning_label:
+		invincible_debug_warning_label.visible = enabled
 
 func _on_debug_fever_fill_pressed() -> void:
 	debug_fever_fill_requested.emit()

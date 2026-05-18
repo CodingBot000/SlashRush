@@ -33,6 +33,26 @@ static func play_player_hurt(owner: Node) -> void:
 	if audio_manager != null and audio_manager.has_method("play_player_hurt"):
 		audio_manager.play_player_hurt()
 
+static func play_lobby_music(owner: Node) -> void:
+	var audio_manager := _get_audio_manager(owner)
+	if audio_manager != null and audio_manager.has_method("play_lobby_music"):
+		audio_manager.play_lobby_music()
+
+static func play_running_music(owner: Node) -> void:
+	var audio_manager := _get_audio_manager(owner)
+	if audio_manager != null and audio_manager.has_method("play_running_music"):
+		audio_manager.play_running_music()
+
+static func play_boss_music(owner: Node) -> void:
+	var audio_manager := _get_audio_manager(owner)
+	if audio_manager != null and audio_manager.has_method("play_boss_music"):
+		audio_manager.play_boss_music()
+
+static func stop_music(owner: Node) -> void:
+	var audio_manager := _get_audio_manager(owner)
+	if audio_manager != null and audio_manager.has_method("stop_music"):
+		audio_manager.stop_music()
+
 static func _get_audio_manager(owner: Node) -> Node:
 	if owner == null:
 		return null

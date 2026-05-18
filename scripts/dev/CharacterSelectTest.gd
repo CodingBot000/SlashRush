@@ -47,6 +47,12 @@ func _run() -> void:
 	if not player1_image is TextureRect or player1_image.texture == null:
 		_fail("player1 card should show a character image.")
 		return
+	if not _card_has_white_portrait_box(player1_card):
+		_fail("player1 card should show a white portrait box behind the character image.")
+		return
+	if not _player1_png_has_transparent_background():
+		_fail("player1.png should have a transparent background.")
+		return
 
 	for index in range(2, 6):
 		var card := card_row.get_node_or_null("CharacterCard_player%s" % index)
@@ -58,6 +64,9 @@ func _run() -> void:
 			return
 		if card.find_child("LockedOverlay", true, false) == null:
 			_fail("player%s card should have a locked overlay." % index)
+			return
+		if not _card_has_white_portrait_box(card):
+			_fail("player%s card should show a white portrait box behind the character image." % index)
 			return
 
 	var coming_soon_card := card_row.get_node_or_null("CharacterCard_ComingSoon")
@@ -110,6 +119,22 @@ func _card_has_text(card: Node, expected_text: String) -> bool:
 func _message_is(character_select: Node, expected_text: String) -> bool:
 	var message_label := character_select.get_node_or_null("SafeArea/Layout/MessageLabel")
 	return message_label is Label and message_label.text == expected_text
+
+func _card_has_white_portrait_box(card: Node) -> bool:
+	var portrait_background := card.find_child("PortraitBackground", true, false)
+	if not portrait_background is ColorRect:
+		return false
+	var color: Color = portrait_background.color
+	return color.is_equal_approx(Color.WHITE)
+
+func _player1_png_has_transparent_background() -> bool:
+	var bytes := FileAccess.get_file_as_bytes("res://assets/characters/player1.png")
+	if bytes.is_empty():
+		return false
+	var image := Image.new()
+	if image.load_png_from_buffer(bytes) != OK:
+		return false
+	return image.get_pixel(0, 0).a < 0.01
 
 func _drag_scrolls_character_row(character_select: Node, scroller: ScrollContainer) -> bool:
 	var start_position := scroller.get_global_rect().get_center()

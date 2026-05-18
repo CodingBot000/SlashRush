@@ -14,6 +14,7 @@ var opening_main_menu := false
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	AudioHooksScript.play_lobby_music(self)
 	_build_scene()
 
 func _process(delta: float) -> void:

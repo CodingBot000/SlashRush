@@ -9,6 +9,8 @@ const PAUSE_OVERLAY_SCENE := preload("res://scenes/ui/PauseOverlay.tscn")
 const MAIN_MENU_SCENE_PATH := "res://scenes/game/MainMenu.tscn"
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
 const PlayerLifeState := preload("res://scripts/game/PlayerLifeState.gd")
+const SAVE_PATH := "user://save.cfg"
+const SAVE_SECTION := "progress"
 
 var input_interpreter
 var runner_stage
@@ -22,6 +24,7 @@ var current_score := 0
 var current_coins := 0
 var current_hp := GameBalance.STARTING_HP
 var best_score := 0
+var total_coins := 0
 
 func _ready() -> void:
 	randomize()
@@ -132,6 +135,7 @@ func _show_result(won: bool) -> void:
 	boss_stage.stop_boss()
 	boss_stage.visible = not won and finished_state == "boss"
 	game_hud.visible = false
+	total_coins += max(0, current_coins)
 	best_score = max(best_score, current_score)
 	_save_game()
 	if dead_overlay_data.is_empty():
@@ -281,13 +285,15 @@ func _remove_mouse_event(action_name: String, button_index: MouseButton) -> void
 
 func _load_save() -> void:
 	var config := ConfigFile.new()
-	if config.load("user://save.cfg") == OK:
-		best_score = int(config.get_value("progress", "best_score", 0))
+	if config.load(SAVE_PATH) == OK:
+		best_score = int(config.get_value(SAVE_SECTION, "best_score", 0))
+		total_coins = int(config.get_value(SAVE_SECTION, "coins", 0))
 
 func _save_game() -> void:
 	var config := ConfigFile.new()
-	config.set_value("progress", "best_score", best_score)
-	config.save("user://save.cfg")
+	config.set_value(SAVE_SECTION, "best_score", best_score)
+	config.set_value(SAVE_SECTION, "coins", total_coins)
+	config.save(SAVE_PATH)
 
 func _is_player_invincible() -> bool:
 	var debug_flags := get_node_or_null("/root/DebugFlags")

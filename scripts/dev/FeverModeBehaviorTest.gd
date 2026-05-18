@@ -19,7 +19,10 @@ func _run() -> void:
 	await _assert_runner_fever_lifecycle_and_rush_pause(runner)
 	await _assert_runner_fever_end_clears_rush_and_delays_spawn(runner)
 	await _assert_runner_fever_scroll_speed_multiplier(runner)
+	await _assert_runner_fever_object_speed_multiplier(runner)
+	await _assert_runner_fever_run_animation_speed(runner)
 	await _assert_runner_fever_missed_objects_are_discarded(runner)
+	await _assert_runner_fever_direct_fail_is_invincible(runner)
 	await _assert_runner_fever_any_slash_succeeds(runner)
 	await _assert_runner_fever_orb_collection_starts_fever(runner)
 
@@ -80,6 +83,38 @@ func _assert_runner_fever_scroll_speed_multiplier(stage) -> void:
 	if not is_equal_approx(stage._get_scroll_speed_multiplier(), 1.0):
 		_fail("Runner fever scroll speed should return to normal when fever ends.")
 
+func _assert_runner_fever_object_speed_multiplier(stage) -> void:
+	_prepare_runner_fever(stage)
+	if not is_equal_approx(stage._get_object_speed_multiplier(), GameBalance.RUNNER_FEVER_OBJECT_SPEED_MULTIPLIER):
+		_fail("Runner fever should double object approach speed.")
+
+	var enemy = _add_zone_object(stage, "enemy_basic")
+	enemy.position = Vector2(1000.0, GameBalance.GAMEPLAY_BASELINE_Y)
+	var start_x: float = enemy.position.x
+	stage._move_objects(0.1, stage._get_object_speed_multiplier())
+	var expected_x := start_x - GameBalance.OBJECT_SPEED * GameBalance.RUNNER_FEVER_OBJECT_SPEED_MULTIPLIER * 0.1
+	if not is_equal_approx(enemy.position.x, expected_x):
+		_fail("Runner fever objects should move at the fever object speed multiplier.")
+
+	stage.fever_mode.end()
+	stage._sync_fever_state()
+	if not is_equal_approx(stage._get_object_speed_multiplier(), 1.0):
+		_fail("Runner object speed should return to normal when fever ends.")
+
+func _assert_runner_fever_run_animation_speed(stage) -> void:
+	_prepare_runner_fever(stage)
+	await process_frame
+
+	if stage.player.run_sprite == null:
+		_fail("Runner player should have a run animation sprite.")
+	if not is_equal_approx(stage.player.run_sprite.speed_scale, GameBalance.RUNNER_FEVER_RUN_ANIMATION_SPEED_MULTIPLIER):
+		_fail("Runner fever should triple player run animation speed.")
+
+	stage.fever_mode.end()
+	await process_frame
+	if not is_equal_approx(stage.player.run_sprite.speed_scale, 1.0):
+		_fail("Runner run animation speed should return to normal when fever ends.")
+
 func _assert_runner_fever_missed_objects_are_discarded(stage) -> void:
 	_prepare_runner_fever(stage)
 	stage.hp = GameBalance.MAX_HP
@@ -103,6 +138,19 @@ func _assert_runner_fever_missed_objects_are_discarded(stage) -> void:
 
 	if stage.score != 0 or stage.coins != 0:
 		_fail("Missed good items during runner fever should not be collected.")
+
+func _assert_runner_fever_direct_fail_is_invincible(stage) -> void:
+	_prepare_runner_fever(stage)
+	stage.hp = GameBalance.MAX_HP
+	var bomb = _add_zone_object(stage, "bomb")
+	stage._fail_object(bomb, false)
+	var bomb_handled: bool = bomb.handled
+	await process_frame
+
+	if stage.hp != GameBalance.MAX_HP:
+		_fail("Runner fever should ignore direct fail damage.")
+	if not bomb_handled:
+		_fail("Runner fever direct fail objects should be discarded.")
 
 func _assert_runner_fever_any_slash_succeeds(stage) -> void:
 	_prepare_runner_fever(stage)

@@ -83,6 +83,7 @@ func start_run() -> void:
 	_set_fever_impact_active(false)
 	if player and player.has_method("play_run"):
 		player.play_run()
+	_set_player_fever_run_animation(false)
 	fever_mode.reset()
 	_sync_fever_state()
 	if standalone_input_interpreter:
@@ -90,13 +91,16 @@ func start_run() -> void:
 		standalone_input_interpreter.set_fever_mode_active(false)
 	_build_slice_cut_sequence()
 	visible = true
+	AudioHooksScript.play_running_music(self)
 	spawner.start()
 	_emit_stats()
 	#_emit_feedback("TAP / TAP TAP / HOLD", Color(1.0, 1.0, 1.0, 1.0))
 
 func stop_run() -> void:
 	active = false
+	AudioHooksScript.stop_music(self)
 	_set_fever_impact_active(false)
+	_set_player_fever_run_animation(false)
 	spawner.stop()
 	if fever_mode:
 		fever_mode.reset()
@@ -161,7 +165,7 @@ func _process(delta: float) -> void:
 	var scroll_multiplier := _get_scroll_speed_multiplier() * _get_hurt_background_speed_multiplier()
 	parallax.process_scroll(delta, GameBalance.MAP_SCROLL_SPEED * scroll_multiplier)
 	ground.process_scroll(delta, GameBalance.GROUND_SCROLL_SPEED * scroll_multiplier)
-	_move_objects(delta, _get_hurt_object_speed_multiplier())
+	_move_objects(delta, _get_object_speed_multiplier() * _get_hurt_object_speed_multiplier())
 
 func _build_scene() -> void:
 	world_root = Node2D.new()
@@ -513,6 +517,9 @@ func _success_object(object, automatic: bool, play_player_slash: bool = true) ->
 func _fail_object(object, sliced_wrong: bool) -> void:
 	if object.handled:
 		return
+	if _is_runner_fever_active():
+		_discard_fever_missed_object(object)
+		return
 	if is_player_hurt_locked():
 		_discard_object_during_hurt(object)
 		return
@@ -670,6 +677,7 @@ func _on_runner_fever_started() -> void:
 	_sync_fever_state()
 	_fever_rush_pause_applied = false
 	_set_fever_impact_active(true)
+	_set_player_fever_run_animation(true)
 	_clear_active_normal_objects()
 	spawner.set_fever_rush_enabled(true)
 	_emit_feedback("FEVER!", Color.html("#5ef3ff"))
@@ -679,6 +687,7 @@ func _on_runner_fever_started() -> void:
 func _on_runner_fever_ended() -> void:
 	_sync_fever_state()
 	_set_fever_impact_active(false)
+	_set_player_fever_run_animation(false)
 	spawner.set_fever_rush_enabled(false)
 	spawner.mark_fever_ended()
 	spawner.pause_spawning(GameBalance.FEVER_END_NORMAL_SPAWN_DELAY)
@@ -728,6 +737,9 @@ func is_player_hurt_locked() -> bool:
 
 func _get_scroll_speed_multiplier() -> float:
 	return GameBalance.RUNNER_FEVER_SCROLL_SPEED_MULTIPLIER if _is_runner_fever_active() else 1.0
+
+func _get_object_speed_multiplier() -> float:
+	return GameBalance.RUNNER_FEVER_OBJECT_SPEED_MULTIPLIER if _is_runner_fever_active() else 1.0
 
 func _start_hurt_slow() -> void:
 	hurt_slow_timer = max(hurt_slow_timer, GameBalance.PLAYER_HURT_SLOW_DURATION)
@@ -802,6 +814,12 @@ func _is_player_invincible() -> bool:
 func _set_fever_impact_active(active_value: bool) -> void:
 	if fever_impact_overlay != null and fever_impact_overlay.has_method("set_active"):
 		fever_impact_overlay.set_active(active_value)
+
+func _set_player_fever_run_animation(active_value: bool) -> void:
+	if player == null or not player.has_method("set_run_animation_speed_multiplier"):
+		return
+	var multiplier := GameBalance.RUNNER_FEVER_RUN_ANIMATION_SPEED_MULTIPLIER if active_value else 1.0
+	player.set_run_animation_speed_multiplier(multiplier)
 
 func _spawn_world_text(text: String, pos: Vector2, color: Color, font_size: int = 24, label_size: Vector2 = Vector2(130.0, 40.0), emphasized: bool = false) -> void:
 	var label := Label.new()

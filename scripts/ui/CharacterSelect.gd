@@ -8,6 +8,7 @@ const DEFAULT_MESSAGE := "More characters will be available in future versions."
 const CARD_WIDTH := 206.0
 const CARD_HEIGHT := 370.0
 const PORTRAIT_HEIGHT := 252.0
+const PORTRAIT_IMAGE_BOX_COLOR := Color.WHITE
 const DRAG_CLICK_CANCEL_DISTANCE := 12.0
 
 var characters := [
@@ -59,6 +60,7 @@ var suppress_next_card_press := false
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	AudioHooksScript.play_lobby_music(self)
 	_build_scene()
 
 func _input(event: InputEvent) -> void:
@@ -307,7 +309,7 @@ func _make_portrait_area(data: Dictionary, unlocked: bool, selected: bool) -> Co
 	var portrait_background := ColorRect.new()
 	portrait_background.name = "PortraitBackground"
 	portrait_background.set_anchors_preset(Control.PRESET_FULL_RECT)
-	portrait_background.color = Color(0.0, 0.0, 0.0, 0.22)
+	portrait_background.color = PORTRAIT_IMAGE_BOX_COLOR
 	portrait_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	portrait.add_child(portrait_background)
 

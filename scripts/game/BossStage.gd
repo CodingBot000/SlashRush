@@ -124,6 +124,7 @@ func start_boss(start_score: int, start_coins: int, start_hp: int) -> void:
 		boss_visual.set_process(true)
 	active = true
 	visible = true
+	AudioHooksScript.play_boss_music(self)
 	_hide_pattern_cue()
 	fever_state_changed.emit(false)
 	feedback_requested.emit("BOSS", Color.html("#ffef8a"))
@@ -132,6 +133,7 @@ func start_boss(start_score: int, start_coins: int, start_hp: int) -> void:
 func stop_boss() -> void:
 	active = false
 	visible = false
+	AudioHooksScript.stop_music(self)
 	player_hurt_timer = 0.0
 	_set_fever_impact_active(false)
 	if boss_fever_mode:
@@ -411,6 +413,7 @@ func _finish(won: bool) -> void:
 	if not active:
 		return
 	active = false
+	AudioHooksScript.stop_music(self)
 	_set_fever_impact_active(false)
 	_hide_pattern_cue()
 	if won:

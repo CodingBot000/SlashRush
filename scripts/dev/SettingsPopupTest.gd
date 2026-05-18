@@ -10,7 +10,12 @@ func _run() -> void:
 	if settings == null:
 		_fail("GameSettings autoload should exist.")
 		return
+	var debug_flags = root.get_node_or_null("DebugFlags")
+	if debug_flags == null:
+		_fail("DebugFlags autoload should exist.")
+		return
 	settings.reset_to_defaults()
+	debug_flags.player_invincible = false
 
 	var popup = SETTINGS_POPUP_SCENE.instantiate()
 	root.add_child(popup)
@@ -56,6 +61,34 @@ func _run() -> void:
 		_fail("Player hurt vibration toggle should display OFF when disabled.")
 		return
 
+	if popup.invincible_debug_toggle == null:
+		_fail("Settings popup should expose an invincible debug toggle.")
+		return
+	if not popup.invincible_debug_toggle.text.contains("(게임테스트용)"):
+		_fail("Invincible debug toggle should explain that it is for game testing.")
+		return
+	if not popup.invincible_debug_toggle.text.ends_with("OFF"):
+		_fail("Invincible debug toggle should display OFF when disabled.")
+		return
+
+	popup.invincible_debug_toggle.button_pressed = true
+	await process_frame
+	if not debug_flags.player_invincible:
+		_fail("Invincible debug toggle should update DebugFlags immediately.")
+		return
+	if not popup.invincible_debug_toggle.text.ends_with("ON"):
+		_fail("Invincible debug toggle should display ON when enabled.")
+		return
+
+	popup.invincible_debug_toggle.button_pressed = false
+	await process_frame
+	if debug_flags.player_invincible:
+		_fail("Invincible debug toggle should disable DebugFlags immediately.")
+		return
+	if not popup.invincible_debug_toggle.text.ends_with("OFF"):
+		_fail("Invincible debug toggle should display OFF when disabled again.")
+		return
+
 	popup.close_popup()
 	await process_frame
 	if popup.is_popup_open():
@@ -63,6 +96,7 @@ func _run() -> void:
 		return
 
 	settings.reset_to_defaults()
+	debug_flags.player_invincible = false
 	popup.queue_free()
 	await process_frame
 	quit()

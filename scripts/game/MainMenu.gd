@@ -11,12 +11,15 @@ const SETTINGS_POPUP_SCENE := preload("res://scenes/ui/SettingsPopup.tscn")
 const GAME_SCENE_PATH := "res://scenes/Main.tscn"
 const HOW_TO_SCENE_PATH := "res://scenes/ui/HowToScreen.tscn"
 const CHARACTER_SELECT_SCENE_PATH := "res://scenes/ui/CharacterSelect.tscn"
+const SAVE_PATH := "user://save.cfg"
+const SAVE_SECTION := "progress"
 
 var settings_popup
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	AudioHooksScript.play_lobby_music(self)
 	_build_scene()
 
 func _build_scene() -> void:
@@ -59,7 +62,11 @@ func _build_scene() -> void:
 
 	var bottom_label := Label.new()
 	bottom_label.name = "StatsLabel"
-	bottom_label.text = "Coins: 0.   Best Score: 0"
+	var progress := _load_progress()
+	bottom_label.text = "Coins: %d.   Best Score: %d" % [
+		int(progress.get("coins", 0)),
+		int(progress.get("best_score", 0))
+	]
 	bottom_label.position = Vector2(0.0, screen_size.y - 58.0)
 	bottom_label.size = Vector2(screen_size.x, 38.0)
 	bottom_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -145,6 +152,18 @@ func _on_character_pressed() -> void:
 func _on_settings_pressed() -> void:
 	if settings_popup and settings_popup.has_method("open_popup"):
 		settings_popup.open_popup()
+
+func _load_progress() -> Dictionary:
+	var config := ConfigFile.new()
+	if config.load(SAVE_PATH) != OK:
+		return {
+			"coins": 0,
+			"best_score": 0
+		}
+	return {
+		"coins": int(config.get_value(SAVE_SECTION, "coins", 0)),
+		"best_score": int(config.get_value(SAVE_SECTION, "best_score", 0))
+	}
 
 func _load_texture(path: String) -> Texture2D:
 	if ResourceLoader.exists(path, "Texture2D"):

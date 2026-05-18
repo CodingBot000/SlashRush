@@ -23,6 +23,9 @@ func _run() -> void:
 	if audio_manager.player_hurt_player == null or audio_manager.player_hurt_player.stream == null:
 		_fail("AudioManager should load the player hurt sound.")
 		return
+	if audio_manager.music_player == null:
+		_fail("AudioManager should create one shared music audio player.")
+		return
 
 	var button := Button.new()
 	root.add_child(button)
@@ -36,6 +39,31 @@ func _run() -> void:
 
 	audio_manager.ui_button_click_player.stop()
 	button.queue_free()
+
+	audio_manager.play_lobby_music()
+	await process_frame
+	if not audio_manager.music_player.playing or audio_manager.current_music_path != audio_manager.LOBBY_MUSIC_PATH:
+		_fail("AudioManager should play lobby music through the shared music player.")
+		return
+
+	audio_manager.play_running_music()
+	await process_frame
+	if not audio_manager.music_player.playing or audio_manager.current_music_path != audio_manager.RUNNING_MUSIC_PATH:
+		_fail("AudioManager should play running music through the shared music player.")
+		return
+
+	audio_manager.play_boss_music()
+	await process_frame
+	if not audio_manager.music_player.playing or audio_manager.current_music_path != audio_manager.BOSS_MUSIC_PATH:
+		_fail("AudioManager should switch the shared music player to boss music.")
+		return
+
+	audio_manager.stop_music()
+	await process_frame
+	if audio_manager.music_player.playing or audio_manager.current_music_path != "":
+		_fail("AudioManager should stop and clear shared music.")
+		return
+
 	await process_frame
 	quit()
 

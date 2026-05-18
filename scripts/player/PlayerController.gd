@@ -45,6 +45,7 @@ var _base_visual_y := 0.0
 var _motion_state := MotionState.RUN
 var _pre_damage_state := MotionState.RUN
 var _slash_active := false
+var _run_animation_speed_multiplier := 1.0
 
 func _ready() -> void:
 	_build_visual()
@@ -64,6 +65,10 @@ func play_run() -> void:
 		return
 	_motion_state = MotionState.RUN
 	_apply_motion_state()
+
+func set_run_animation_speed_multiplier(multiplier: float) -> void:
+	_run_animation_speed_multiplier = maxf(multiplier, 0.0)
+	_apply_run_animation_speed()
 
 func play_idle() -> void:
 	if _motion_state == MotionState.DAMAGE:
@@ -188,6 +193,7 @@ func _add_run_animation() -> bool:
 	run_sprite.position = _sprite_base_position
 	visual_root.add_child(run_sprite)
 	run_sprite.play(RUN_ANIMATION_NAME)
+	_apply_run_animation_speed()
 	return true
 
 func _add_static_sprite(sprite_name: String, texture_path: String, z_index: int) -> Sprite2D:
@@ -251,6 +257,10 @@ func _apply_motion_state() -> void:
 	if _motion_state != MotionState.DAMAGE:
 		visual_root.modulate = Color.WHITE
 	_update_weapon_layers()
+
+func _apply_run_animation_speed() -> void:
+	if run_sprite:
+		run_sprite.speed_scale = _run_animation_speed_multiplier
 
 func _update_weapon_layers() -> void:
 	var can_show_weapon := _motion_state != MotionState.DAMAGE and _motion_state != MotionState.DEAD
