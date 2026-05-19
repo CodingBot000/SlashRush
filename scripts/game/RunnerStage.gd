@@ -10,6 +10,10 @@ const PLAYER_SCENE := preload("res://scenes/player/Player.tscn")
 const INPUT_INTERPRETER_SCRIPT := preload("res://scripts/player/InputInterpreter.gd")
 const GAME_HUD_SCENE := preload("res://scenes/ui/GameHUD.tscn")
 const BOSS_STAGE_SCENE := preload("res://scenes/game/BossStage.tscn")
+const ActionTypes := preload("res://scripts/data/ActionTypes.gd")
+const StageCatalog := preload("res://scripts/data/stage/StageCatalog.gd")
+const RunnerStageContextScript := preload("res://scripts/game/runner/RunnerStageContext.gd")
+const BossStageContextScript := preload("res://scripts/game/boss/BossStageContext.gd")
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
 const PlayerLifeState := preload("res://scripts/game/PlayerLifeState.gd")
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
@@ -20,6 +24,9 @@ const OBJECT_SPAWNER_SCRIPT := preload("res://scripts/game/ObjectSpawner.gd")
 const RUNNER_FEVER_MODE_SCRIPT := preload("res://scripts/game/RunnerFeverMode.gd")
 const SLICE_EFFECT_FACTORY_SCRIPT := preload("res://scripts/objects/SliceEffectFactory.gd")
 const FEVER_IMPACT_OVERLAY_SCRIPT := preload("res://scripts/effects/FeverImpactOverlay.gd")
+const InputMapUtil := preload("res://scripts/utils/InputMapUtil.gd")
+const DebugFlagsAccess := preload("res://scripts/utils/DebugFlagsAccess.gd")
+const NodeUtil := preload("res://scripts/utils/NodeUtil.gd")
 const ENABLE_FEVER_IMPACT_OVERLAY := true
 const SLICE_CUT_SEQUENCE_LENGTH := 30
 const SLICE_START_ANGLE_MIN := 240.0
@@ -59,18 +66,29 @@ var _fever_rush_pause_applied := false
 var slice_cut_sequence := []
 var slice_cut_index := 0
 var slice_cut_rng := RandomNumberGenerator.new()
+var stage_context = null
+var runner_config = null
 
 func _ready() -> void:
+	_ensure_stage_context()
 	_build_scene()
 	visible = false
 	call_deferred("_start_if_standalone")
 
+func configure(context) -> void:
+	stage_context = context
+	if stage_context != null:
+		runner_config = stage_context.runner_config
+	_apply_runner_config_to_scene()
+
 func start_run() -> void:
+	_ensure_stage_context()
+	_apply_runner_config_to_scene()
 	_clear_children(object_root)
 	_clear_children(piece_root)
-	score = 0
-	coins = 0
-	hp = GameBalance.STARTING_HP
+	score = int(stage_context.start_score) if stage_context != null else 0
+	coins = int(stage_context.start_coins) if stage_context != null else 0
+	hp = int(stage_context.start_hp) if stage_context != null and int(stage_context.start_hp) > 0 else GameBalance.STARTING_HP
 	combo = 0
 	fever = 0
 	is_fever = false
@@ -151,7 +169,7 @@ func _process(delta: float) -> void:
 	if not active:
 		return
 	run_elapsed += delta
-	if run_elapsed >= GameBalance.RUNNER_DURATION_SECONDS:
+	if run_elapsed >= _get_runner_duration_seconds():
 		_finish_run(true)
 		return
 
@@ -163,8 +181,8 @@ func _process(delta: float) -> void:
 		return
 
 	var scroll_multiplier := _get_scroll_speed_multiplier() * _get_hurt_background_speed_multiplier()
-	parallax.process_scroll(delta, GameBalance.MAP_SCROLL_SPEED * scroll_multiplier)
-	ground.process_scroll(delta, GameBalance.GROUND_SCROLL_SPEED * scroll_multiplier)
+	parallax.process_scroll(delta, _get_map_scroll_speed() * scroll_multiplier)
+	ground.process_scroll(delta, _get_ground_scroll_speed() * scroll_multiplier)
 	_move_objects(delta, _get_object_speed_multiplier() * _get_hurt_object_speed_multiplier())
 
 func _build_scene() -> void:
@@ -175,12 +193,12 @@ func _build_scene() -> void:
 	parallax = PARALLAX_SCROLLER_SCRIPT.new()
 	parallax.name = "ParallaxScroller"
 	world_root.add_child(parallax)
-	parallax.setup()
+	parallax.setup(_get_runner_config())
 
 	ground = GROUND_LOOPER_SCRIPT.new()
 	ground.name = "GroundLooper"
 	world_root.add_child(ground)
-	ground.setup()
+	ground.setup(_get_runner_config())
 
 	_add_fever_impact_overlay()
 
@@ -194,6 +212,8 @@ func _build_scene() -> void:
 
 	player = PLAYER_SCENE.instantiate()
 	player.name = "Player"
+	if player.has_method("configure_visual_profile"):
+		player.configure_visual_profile(_get_character_profile())
 	player.position = Vector2(210.0, GameBalance.GAMEPLAY_BASELINE_Y)
 	world_root.add_child(player)
 
@@ -202,12 +222,14 @@ func _build_scene() -> void:
 	spawner = OBJECT_SPAWNER_SCRIPT.new()
 	spawner.name = "ObjectSpawner"
 	add_child(spawner)
+	spawner.configure(_get_runner_config(), _get_object_visual_set())
 	spawner.set_player_health_provider(Callable(self, "_get_spawn_player_hp"), Callable(self, "_get_spawn_player_max_hp"))
 	spawner.object_spawned.connect(_on_object_spawned)
 
 	fever_mode = RUNNER_FEVER_MODE_SCRIPT.new()
 	fever_mode.name = "RunnerFeverMode"
 	add_child(fever_mode)
+	fever_mode.configure(_get_runner_config())
 	fever_mode.started.connect(_on_runner_fever_started)
 	fever_mode.ended.connect(_on_runner_fever_ended)
 	fever_mode.changed.connect(_on_runner_fever_changed)
@@ -287,6 +309,8 @@ func _start_standalone_boss(payload: Dictionary) -> void:
 	standalone_boss_stage = BOSS_STAGE_SCENE.instantiate()
 	standalone_boss_stage.name = "StandaloneBossStage"
 	add_child(standalone_boss_stage)
+	var stage_definition = StageCatalog.get_stage(stage_context.stage_id if stage_context != null else StageCatalog.DEFAULT_STAGE_ID)
+	standalone_boss_stage.configure(BossStageContextScript.from_stage(stage_definition, null))
 	standalone_boss_stage.stats_changed.connect(standalone_hud.update_boss)
 	standalone_boss_stage.feedback_requested.connect(standalone_hud.show_feedback)
 	standalone_boss_stage.boss_finished.connect(_on_standalone_boss_finished)
@@ -316,46 +340,11 @@ func _is_standalone_player_action_blocked() -> bool:
 	return is_player_hurt_locked()
 
 func _ensure_standalone_input_actions() -> void:
-	_add_action_if_missing("tap_action")
-	_add_key_event("tap_action", KEY_SPACE)
-	_remove_mouse_event("tap_action", MOUSE_BUTTON_LEFT)
-	_add_action_if_missing("debug_restart")
-	_add_key_event("debug_restart", KEY_R)
-
-func _add_action_if_missing(action_name: String) -> void:
-	if not InputMap.has_action(action_name):
-		InputMap.add_action(action_name)
-
-func _add_key_event(action_name: String, keycode: Key) -> void:
-	if _action_has_key(action_name, keycode):
-		return
-	var event := InputEventKey.new()
-	event.physical_keycode = keycode
-	InputMap.action_add_event(action_name, event)
-
-func _add_mouse_event(action_name: String, button_index: MouseButton) -> void:
-	if _action_has_mouse(action_name, button_index):
-		return
-	var event := InputEventMouseButton.new()
-	event.button_index = button_index
-	InputMap.action_add_event(action_name, event)
-
-func _action_has_key(action_name: String, keycode: Key) -> bool:
-	for event in InputMap.action_get_events(action_name):
-		if event is InputEventKey and event.physical_keycode == keycode:
-			return true
-	return false
-
-func _action_has_mouse(action_name: String, button_index: MouseButton) -> bool:
-	for event in InputMap.action_get_events(action_name):
-		if event is InputEventMouseButton and event.button_index == button_index:
-			return true
-	return false
-
-func _remove_mouse_event(action_name: String, button_index: MouseButton) -> void:
-	for event in InputMap.action_get_events(action_name):
-		if event is InputEventMouseButton and event.button_index == button_index:
-			InputMap.action_erase_event(action_name, event)
+	InputMapUtil.add_action_if_missing("tap_action")
+	InputMapUtil.add_key_event("tap_action", KEY_SPACE)
+	InputMapUtil.remove_mouse_event("tap_action", MOUSE_BUTTON_LEFT)
+	InputMapUtil.add_action_if_missing("debug_restart")
+	InputMapUtil.add_key_event("debug_restart", KEY_R)
 
 func _add_action_zone_visual() -> void:
 	var zone := Polygon2D.new()
@@ -376,6 +365,37 @@ func _add_action_zone_visual() -> void:
 func _on_object_spawned(object) -> void:
 	object_root.add_child(object)
 
+func _ensure_stage_context() -> void:
+	if stage_context == null:
+		stage_context = RunnerStageContextScript.make_default()
+	if runner_config == null and stage_context != null:
+		runner_config = stage_context.runner_config
+
+func _get_runner_config():
+	_ensure_stage_context()
+	return runner_config
+
+func _get_character_profile():
+	_ensure_stage_context()
+	return stage_context.character_profile if stage_context != null else null
+
+func _get_object_visual_set():
+	_ensure_stage_context()
+	return stage_context.object_visual_set if stage_context != null else null
+
+func _apply_runner_config_to_scene() -> void:
+	_ensure_stage_context()
+	if parallax != null:
+		parallax.setup(_get_runner_config())
+	if ground != null:
+		ground.setup(_get_runner_config())
+	if player != null and player.has_method("configure_visual_profile"):
+		player.configure_visual_profile(_get_character_profile())
+	if spawner != null:
+		spawner.configure(_get_runner_config(), _get_object_visual_set())
+	if fever_mode != null:
+		fever_mode.configure(_get_runner_config())
+
 func _get_spawn_player_hp() -> int:
 	return hp
 
@@ -389,7 +409,7 @@ func _move_objects(delta: float, speed_multiplier: float = 1.0) -> void:
 		var object = child
 		if object.handled:
 			continue
-		object.position.x -= GameBalance.OBJECT_SPEED * speed_multiplier * delta
+		object.position.x -= _get_base_object_speed() * speed_multiplier * delta
 		if object.position.x < GameBalance.ACTION_ZONE_CENTER.x - GameBalance.ACTION_ZONE_SIZE.x * 0.5 - 70.0:
 			_handle_passed_object(object)
 
@@ -479,13 +499,7 @@ func _is_in_action_zone(object) -> bool:
 	return abs(object.position.x - center.x) <= half.x and abs(object.position.y - center.y) <= half.y
 
 func _action_matches(required: String, action: String) -> bool:
-	if _is_runner_fever_active():
-		return true
-	if required == action:
-		return true
-	if required == "tap" and action == "double_tap":
-		return true
-	return false
+	return ActionTypes.matches(required, action, _is_runner_fever_active())
 
 func _counts_for_combo(object) -> bool:
 	var object_type := String(object.object_type)
@@ -647,10 +661,10 @@ func _update_fever(delta: float) -> void:
 	var was_active: bool = fever_mode.active
 	fever_mode.update(delta)
 	_sync_fever_state()
-	if fever_mode.active and not _fever_rush_pause_applied and fever_timer <= GameBalance.FEVER_RUSH_SPAWN_STOP_BEFORE_END:
+	if fever_mode.active and not _fever_rush_pause_applied and fever_timer <= _get_fever_rush_spawn_stop_before_end():
 		_fever_rush_pause_applied = true
 		spawner.set_fever_rush_enabled(false)
-		spawner.pause_spawning(GameBalance.FEVER_RUSH_SPAWN_PAUSE_DURATION)
+		spawner.pause_spawning(_get_fever_rush_spawn_pause_duration())
 	else:
 		spawner.set_fever_rush_enabled(fever_mode.should_spawn_rush())
 	if was_active or fever_mode.active:
@@ -690,7 +704,7 @@ func _on_runner_fever_ended() -> void:
 	_set_player_fever_run_animation(false)
 	spawner.set_fever_rush_enabled(false)
 	spawner.mark_fever_ended()
-	spawner.pause_spawning(GameBalance.FEVER_END_NORMAL_SPAWN_DELAY)
+	spawner.pause_spawning(_get_fever_recover_time())
 	_clear_fever_rush_objects()
 	_emit_feedback("FEVER END", Color.html("#d9f7ff"))
 	_emit_stats()
@@ -736,10 +750,10 @@ func is_player_hurt_locked() -> bool:
 	return active and hurt_slow_timer > 0.0
 
 func _get_scroll_speed_multiplier() -> float:
-	return GameBalance.RUNNER_FEVER_SCROLL_SPEED_MULTIPLIER if _is_runner_fever_active() else 1.0
+	return _get_fever_scroll_speed_multiplier() if _is_runner_fever_active() else 1.0
 
 func _get_object_speed_multiplier() -> float:
-	return GameBalance.RUNNER_FEVER_OBJECT_SPEED_MULTIPLIER if _is_runner_fever_active() else 1.0
+	return _get_fever_object_speed_multiplier() if _is_runner_fever_active() else 1.0
 
 func _start_hurt_slow() -> void:
 	hurt_slow_timer = max(hurt_slow_timer, GameBalance.PLAYER_HURT_SLOW_DURATION)
@@ -754,6 +768,51 @@ func _get_hurt_background_speed_multiplier() -> float:
 
 func _get_hurt_object_speed_multiplier() -> float:
 	return GameBalance.PLAYER_HURT_OBJECT_SPEED_MULTIPLIER if hurt_slow_timer > 0.0 else 1.0
+
+func _get_runner_duration_seconds() -> float:
+	if _get_runner_config() != null:
+		return float(_get_runner_config().duration_seconds)
+	return GameBalance.RUNNER_DURATION_SECONDS
+
+func _get_map_scroll_speed() -> float:
+	if _get_runner_config() != null:
+		return float(_get_runner_config().map_scroll_speed)
+	return GameBalance.MAP_SCROLL_SPEED
+
+func _get_ground_scroll_speed() -> float:
+	if _get_runner_config() != null:
+		return float(_get_runner_config().ground_scroll_speed)
+	return GameBalance.GROUND_SCROLL_SPEED
+
+func _get_base_object_speed() -> float:
+	if _get_runner_config() != null:
+		return float(_get_runner_config().object_speed)
+	return GameBalance.OBJECT_SPEED
+
+func _get_fever_scroll_speed_multiplier() -> float:
+	if _get_runner_config() != null:
+		return float(_get_runner_config().fever_scroll_speed_multiplier)
+	return GameBalance.RUNNER_FEVER_SCROLL_SPEED_MULTIPLIER
+
+func _get_fever_object_speed_multiplier() -> float:
+	if _get_runner_config() != null:
+		return float(_get_runner_config().fever_object_speed_multiplier)
+	return GameBalance.RUNNER_FEVER_OBJECT_SPEED_MULTIPLIER
+
+func _get_fever_rush_spawn_stop_before_end() -> float:
+	if _get_runner_config() != null:
+		return float(_get_runner_config().fever_rush_spawn_stop_before_end)
+	return GameBalance.FEVER_RUSH_SPAWN_STOP_BEFORE_END
+
+func _get_fever_rush_spawn_pause_duration() -> float:
+	if _get_runner_config() != null:
+		return float(_get_runner_config().fever_rush_spawn_pause_duration)
+	return GameBalance.FEVER_RUSH_SPAWN_PAUSE_DURATION
+
+func _get_fever_recover_time() -> float:
+	if _get_runner_config() != null:
+		return float(_get_runner_config().fever_recover_time)
+	return GameBalance.FEVER_END_NORMAL_SPAWN_DELAY
 
 func _start_hitstop(duration: float, strength: float) -> void:
 	hitstop_timer = max(hitstop_timer, duration)
@@ -808,8 +867,7 @@ func _get_next_slice_cut() -> Dictionary:
 	return cut
 
 func _is_player_invincible() -> bool:
-	var debug_flags := get_node_or_null("/root/DebugFlags")
-	return debug_flags != null and bool(debug_flags.player_invincible)
+	return DebugFlagsAccess.is_player_invincible(self)
 
 func _set_fever_impact_active(active_value: bool) -> void:
 	if fever_impact_overlay != null and fever_impact_overlay.has_method("set_active"):
@@ -843,5 +901,4 @@ func _spawn_world_text(text: String, pos: Vector2, color: Color, font_size: int 
 	tween.tween_callback(Callable(label, "queue_free"))
 
 func _clear_children(node: Node) -> void:
-	for child in node.get_children():
-		child.queue_free()
+	NodeUtil.clear_children(node)

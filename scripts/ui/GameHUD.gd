@@ -9,6 +9,7 @@ const GameBalance := preload("res://scripts/data/GameBalance.gd")
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
 const COMBO_IMPACT_POPUP_SCRIPT := preload("res://scripts/ui/ComboImpactPopup.gd")
 const HEART_DISPLAY_SCRIPT := preload("res://scripts/ui/HeartDisplay.gd")
+const DebugFlagsAccess := preload("res://scripts/utils/DebugFlagsAccess.gd")
 const HUD_TEXT_OUTLINE_SIZE := 5
 const HUD_TEXT_OUTLINE_COLOR := Color(0.0, 0.0, 0.0, 0.88)
 const DEBUG_INVINCIBLE_BUTTON_VISIBLE := false
@@ -325,4 +326,4 @@ func _on_debug_fever_fill_pressed() -> void:
 	debug_fever_fill_requested.emit()
 
 func _get_debug_flags() -> Node:
-	return get_node_or_null("/root/DebugFlags")
+	return DebugFlagsAccess.get_debug_flags(self)

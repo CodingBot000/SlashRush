@@ -10,6 +10,16 @@ const GameBalance := preload("res://scripts/data/GameBalance.gd")
 var fever := 0
 var active := false
 var time_left := 0.0
+var duration_seconds := GameBalance.FEVER_DURATION
+var rush_stop_before_end := GameBalance.FEVER_RUSH_SPAWN_STOP_BEFORE_END
+
+func configure(runner_config) -> void:
+	if runner_config != null:
+		duration_seconds = float(runner_config.fever_duration)
+		rush_stop_before_end = float(runner_config.fever_rush_spawn_stop_before_end)
+	else:
+		duration_seconds = GameBalance.FEVER_DURATION
+		rush_stop_before_end = GameBalance.FEVER_RUSH_SPAWN_STOP_BEFORE_END
 
 func reset() -> void:
 	fever = 0
@@ -37,7 +47,7 @@ func start() -> void:
 		return
 	active = true
 	fever = GameBalance.FEVER_MAX
-	time_left = GameBalance.FEVER_DURATION
+	time_left = duration_seconds
 	started.emit()
 	changed.emit(fever, active, time_left)
 
@@ -48,7 +58,7 @@ func update(delta: float) -> void:
 	if time_left <= 0.0:
 		end()
 		return
-	fever = max(0, int(round((time_left / GameBalance.FEVER_DURATION) * float(GameBalance.FEVER_MAX))))
+	fever = max(0, int(round((time_left / duration_seconds) * float(GameBalance.FEVER_MAX))))
 	changed.emit(fever, active, time_left)
 
 func end() -> void:
@@ -61,4 +71,4 @@ func end() -> void:
 	changed.emit(fever, active, time_left)
 
 func should_spawn_rush() -> bool:
-	return active and time_left > GameBalance.FEVER_RUSH_SPAWN_STOP_BEFORE_END
+	return active and time_left > rush_stop_before_end

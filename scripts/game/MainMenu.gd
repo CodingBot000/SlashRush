@@ -2,6 +2,8 @@ extends Control
 class_name MainMenu
 
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
+const ResourceLoadUtil := preload("res://scripts/utils/ResourceLoadUtil.gd")
+const ProgressStore := preload("res://scripts/save/ProgressStore.gd")
 const LOGO_PATH := "res://assets/ui/logo.png"
 const INTRO_BACKGROUND_PATH := "res://assets/background/intro/intro_background.png"
 const MENU_BUTTON_BACKGROUND_PATH := "res://assets/ui/button_rectangle_depth_flat.png"
@@ -11,8 +13,6 @@ const SETTINGS_POPUP_SCENE := preload("res://scenes/ui/SettingsPopup.tscn")
 const GAME_SCENE_PATH := "res://scenes/Main.tscn"
 const HOW_TO_SCENE_PATH := "res://scenes/ui/HowToScreen.tscn"
 const CHARACTER_SELECT_SCENE_PATH := "res://scenes/ui/CharacterSelect.tscn"
-const SAVE_PATH := "user://save.cfg"
-const SAVE_SECTION := "progress"
 
 var settings_popup
 
@@ -154,24 +154,7 @@ func _on_settings_pressed() -> void:
 		settings_popup.open_popup()
 
 func _load_progress() -> Dictionary:
-	var config := ConfigFile.new()
-	if config.load(SAVE_PATH) != OK:
-		return {
-			"coins": 0,
-			"best_score": 0
-		}
-	return {
-		"coins": int(config.get_value(SAVE_SECTION, "coins", 0)),
-		"best_score": int(config.get_value(SAVE_SECTION, "best_score", 0))
-	}
+	return ProgressStore.load_progress_dictionary()
 
 func _load_texture(path: String) -> Texture2D:
-	if ResourceLoader.exists(path, "Texture2D"):
-		var imported_texture := load(path)
-		if imported_texture is Texture2D:
-			return imported_texture
-
-	var image := Image.new()
-	if image.load(path) == OK and not image.is_empty():
-		return ImageTexture.create_from_image(image)
-	return null
+	return ResourceLoadUtil.load_texture(path)

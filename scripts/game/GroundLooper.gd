@@ -1,8 +1,9 @@
 extends Node2D
 class_name GroundLooper
 
+const ResourceLoadUtil := preload("res://scripts/utils/ResourceLoadUtil.gd")
+const ViewportUtil := preload("res://scripts/utils/ViewportUtil.gd")
 const DEFAULT_VIEWPORT_SIZE := Vector2(1280.0, 720.0)
-const GROUND_TEXTURE_PATH := "res://assets/background/stage1/ground_tile_01.png"
 const GROUND_SURFACE_OFFSET := 222.0
 
 var tile_width := 220.0
@@ -11,12 +12,15 @@ var ground_y := 560.0
 var ground_height := 120.0
 var alpha_key_shader: Shader
 
-func setup() -> void:
+func setup(runner_config = null) -> void:
 	for child in get_children():
 		child.queue_free()
-	var texture := _load_texture(GROUND_TEXTURE_PATH)
+	var texture_path := ""
+	if runner_config != null:
+		texture_path = String(runner_config.ground_texture_path)
+	var texture := _load_texture(texture_path)
 	if texture == null:
-		_add_generated_ground()
+		_add_generated_ground(texture_path)
 		return
 
 	z_index = -20
@@ -43,8 +47,9 @@ func process_scroll(delta: float, speed: float) -> void:
 			child.position.x -= speed * delta
 			_wrap_tile(child)
 
-func _add_generated_ground() -> void:
-	push_warning("Failed to load ground texture: %s. Falling back to generated ground." % GROUND_TEXTURE_PATH)
+func _add_generated_ground(texture_path: String = "") -> void:
+	if not texture_path.is_empty():
+		push_warning("Failed to load ground texture: %s. Falling back to generated ground." % texture_path)
 	z_index = -20
 	for index in range(tile_count):
 		var tile := Polygon2D.new()
@@ -86,16 +91,10 @@ func _get_tile_width(tile: Node2D) -> float:
 	return tile_width
 
 func _get_viewport_size() -> Vector2:
-	var viewport_size := get_viewport_rect().size
-	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
-		return DEFAULT_VIEWPORT_SIZE
-	return viewport_size
+	return ViewportUtil.get_viewport_size(self, DEFAULT_VIEWPORT_SIZE)
 
 func _load_texture(path: String) -> Texture2D:
-	var resource := load(path)
-	if resource is Texture2D:
-		return resource
-	return null
+	return ResourceLoadUtil.load_texture(path)
 
 func _make_light_alpha_key_material() -> ShaderMaterial:
 	if alpha_key_shader == null:

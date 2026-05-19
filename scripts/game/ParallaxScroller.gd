@@ -1,36 +1,59 @@
 extends Node2D
 class_name ParallaxScroller
 
+const ResourceLoadUtil := preload("res://scripts/utils/ResourceLoadUtil.gd")
+const ViewportUtil := preload("res://scripts/utils/ViewportUtil.gd")
 const SEGMENT_WIDTH := 420.0
 const SEGMENT_COUNT := 5
 const DEFAULT_VIEWPORT_SIZE := Vector2(1280.0, 720.0)
 
-const SKY_TEXTURE_PATH := "res://assets/background/stage1/sky_static.png"
-const CLOUD_TEXTURE_PATH := "res://assets/background/stage1/cloud_01.png"
-const FAR_TEXTURE_PATH := "res://assets/background/stage1/far_mountains_01.png"
-const MID_TEXTURE_PATH := "res://assets/background/stage1/mid_structures_01.png"
-const NEAR_TEXTURE_PATH := "res://assets/background/stage1/near_foreground_01.png"
 const ENABLE_NEAR_FOREGROUND_LAYER := true
 const FAR_LAYER_SCROLL_FACTOR := 0.24
 const CLOUD_SCROLL_FACTOR := 0.0128
 const SKY_SCALE_MULTIPLIER := 2.0 / 3.0
 const CLOUD_SCALE_MULTIPLIER := 2.0 / 3.0
 const CLOUD_LAYER_Y_OFFSET := 0.0
-const FAR_LAYER_Y_OFFSET := -120.0 ##  mountain
-const MID_LAYER_Y_OFFSET := -130.0  ##  building
-const NEAR_LAYER_Y_OFFSET := -130.0 ## stone and daenamoo
 
 var alpha_key_shader: Shader
 
-func setup() -> void:
+func setup(runner_config = null) -> void:
 	for child in get_children():
 		child.queue_free()
-	_add_sky()
-	_add_cloud_layer()
-	_add_image_layer("FarLayer", FAR_TEXTURE_PATH, FAR_LAYER_SCROLL_FACTOR, -80, Color.html("#94cbe6"), 350.0, 120.0, FAR_LAYER_Y_OFFSET)
-	_add_image_layer("MidLayer", MID_TEXTURE_PATH, 0.58, -60, Color.html("#5c7788"), 430.0, 95.0, MID_LAYER_Y_OFFSET)
+	if runner_config != null and runner_config.background_layers is Array and not runner_config.background_layers.is_empty():
+		_setup_from_config(runner_config.background_layers)
+		return
+	_setup_default_layers()
+
+func _setup_default_layers() -> void:
+	_add_sky("")
+	_add_generated_cloud_layer(CLOUD_SCROLL_FACTOR)
+	_add_layer("FarLayer", FAR_LAYER_SCROLL_FACTOR, Color.html("#94cbe6"), 350.0, 120.0)
+	_add_layer("MidLayer", 0.58, Color.html("#5c7788"), 430.0, 95.0)
 	if ENABLE_NEAR_FOREGROUND_LAYER:
-		_add_image_layer("NearLayer", NEAR_TEXTURE_PATH, 1.12, -40, Color.html("#2c4a42"), 515.0, 58.0, NEAR_LAYER_Y_OFFSET)
+		_add_layer("NearLayer", 1.12, Color.html("#2c4a42"), 515.0, 58.0)
+
+func _setup_from_config(layers: Array) -> void:
+	for layer_data in layers:
+		var kind := String(layer_data.get("kind", "image"))
+		var layer_name := String(layer_data.get("name", "Layer"))
+		var texture_path := String(layer_data.get("texture", ""))
+		var factor := float(layer_data.get("factor", 1.0))
+		match kind:
+			"sky":
+				_add_sky(texture_path)
+			"cloud":
+				_add_cloud_layer(texture_path, factor)
+			_:
+				_add_image_layer(
+					layer_name,
+					texture_path,
+					factor,
+					int(layer_data.get("z_index", -50)),
+					layer_data.get("fallback_color", Color.html("#5c7788")),
+					float(layer_data.get("fallback_base_y", 430.0)),
+					float(layer_data.get("fallback_height", 95.0)),
+					float(layer_data.get("y_offset", 0.0))
+				)
 
 func process_scroll(delta: float, run_speed: float) -> void:
 	for layer in get_children():
@@ -48,10 +71,10 @@ func process_scroll(delta: float, run_speed: float) -> void:
 				elif item.position.x <= -SEGMENT_WIDTH:
 					item.position.x += SEGMENT_WIDTH * float(SEGMENT_COUNT)
 
-func _add_sky() -> void:
-	var texture := _load_texture(SKY_TEXTURE_PATH)
+func _add_sky(texture_path: String = "") -> void:
+	var texture := _load_texture(texture_path)
 	if texture == null:
-		_add_sky_fallback()
+		_add_sky_fallback(texture_path)
 		return
 
 	var sky := Node2D.new()
@@ -74,8 +97,9 @@ func _add_sky() -> void:
 		segment.scale = Vector2(scale_value, scale_value)
 		sky.add_child(segment)
 
-func _add_sky_fallback() -> void:
-	push_warning("Failed to load sky texture: %s. Falling back to generated sky." % SKY_TEXTURE_PATH)
+func _add_sky_fallback(texture_path: String = "") -> void:
+	if not texture_path.is_empty():
+		push_warning("Failed to load sky texture: %s. Falling back to generated sky." % texture_path)
 	var sky := Polygon2D.new()
 	sky.name = "Sky"
 	sky.color = Color.html("#8fd0ff")
@@ -88,16 +112,16 @@ func _add_sky_fallback() -> void:
 	])
 	add_child(sky)
 
-func _add_cloud_layer() -> void:
-	var texture := _load_texture(CLOUD_TEXTURE_PATH)
+func _add_cloud_layer(texture_path: String, factor: float = CLOUD_SCROLL_FACTOR) -> void:
+	var texture := _load_texture(texture_path)
 	if texture == null:
-		push_warning("Failed to load cloud texture: %s." % CLOUD_TEXTURE_PATH)
+		push_warning("Failed to load cloud texture: %s." % texture_path)
 		return
 
 	var layer := Node2D.new()
 	layer.name = "CloudLayer"
 	layer.z_index = -90
-	layer.set_meta("factor", CLOUD_SCROLL_FACTOR)
+	layer.set_meta("factor", factor)
 	layer.set_meta("uses_sprite_wrap", true)
 	add_child(layer)
 
@@ -116,6 +140,15 @@ func _add_cloud_layer() -> void:
 		cloud.position = Vector2(float(index) * segment_width, CLOUD_LAYER_Y_OFFSET)
 		cloud.scale = Vector2(scale_value, scale_value)
 		layer.add_child(cloud)
+
+func _add_generated_cloud_layer(factor: float) -> void:
+	var layer := Node2D.new()
+	layer.name = "CloudLayer"
+	layer.z_index = -90
+	layer.set_meta("factor", factor)
+	add_child(layer)
+	for index in range(SEGMENT_COUNT):
+		_add_cloud(layer, float(index) * SEGMENT_WIDTH + 130.0, 115.0 + float(index % 2) * 28.0)
 
 func _add_image_layer(layer_name: String, texture_path: String, factor: float, z_value: int, fallback_color: Color, fallback_base_y: float, fallback_height: float, y_offset: float = 0.0) -> void:
 	var texture := _load_texture(texture_path)
@@ -239,16 +272,10 @@ func _get_sprite_width(item: Node2D) -> float:
 	return float(item.get_meta("segment_width", 0.0))
 
 func _get_viewport_size() -> Vector2:
-	var viewport_size := get_viewport_rect().size
-	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
-		return DEFAULT_VIEWPORT_SIZE
-	return viewport_size
+	return ViewportUtil.get_viewport_size(self, DEFAULT_VIEWPORT_SIZE)
 
 func _load_texture(path: String) -> Texture2D:
-	var resource := load(path)
-	if resource is Texture2D:
-		return resource
-	return null
+	return ResourceLoadUtil.load_texture(path)
 
 func _make_light_alpha_key_material() -> ShaderMaterial:
 	if alpha_key_shader == null:

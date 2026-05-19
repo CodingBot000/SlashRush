@@ -5,6 +5,7 @@ const LOGO_PATH := "res://assets/ui/logo.png"
 const INTRO_BACKGROUND_PATH := "res://assets/background/intro/intro_background.png"
 const MAIN_MENU_SCENE_PATH := "res://scenes/game/MainMenu.tscn"
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
+const ResourceLoadUtil := preload("res://scripts/utils/ResourceLoadUtil.gd")
 
 var logo: TextureRect
 var start_label: Label
@@ -97,12 +98,4 @@ func _open_main_menu() -> void:
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
 
 func _load_texture(path: String) -> Texture2D:
-	if ResourceLoader.exists(path, "Texture2D"):
-		var imported_texture := load(path)
-		if imported_texture is Texture2D:
-			return imported_texture
-
-	var image := Image.new()
-	if image.load(path) == OK and not image.is_empty():
-		return ImageTexture.create_from_image(image)
-	return null
+	return ResourceLoadUtil.load_texture(path)

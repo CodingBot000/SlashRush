@@ -32,9 +32,14 @@ var visual_effect_time_offset := 0.0
 var visual_effect_base_object_y := 0.0
 var visual_effect_has_object_base_y := false
 
-func setup(type_name: String) -> void:
+func setup(type_name: String, visual_set = null) -> void:
 	object_type = type_name
 	var data: Dictionary = ObjectTypes.get_data(type_name)
+	if visual_set != null and visual_set.has_method("get_visual"):
+		data = data.duplicate(true)
+		var visual_data: Dictionary = visual_set.get_visual(type_name)
+		for key in visual_data.keys():
+			data[key] = visual_data[key]
 	required_action = data["required_action"]
 	is_good_item = data["is_good_item"]
 	score_value = data["score"]

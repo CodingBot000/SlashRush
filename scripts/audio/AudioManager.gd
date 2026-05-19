@@ -1,5 +1,6 @@
 extends Node
 
+const ResourceLoadUtil := preload("res://scripts/utils/ResourceLoadUtil.gd")
 const UI_BUTTON_CLICK_SOUND_PATH := "res://assets/audio/sfx/ui-button-click.ogg"
 const SWORD_SLASH_SOUND_PATH := "res://assets/audio/sfx/sword-slash.mp3"
 const START_GAME_SOUND_PATH := "res://assets/audio/sfx/start_game.ogg"
@@ -115,15 +116,4 @@ func _set_stream_loop(stream: AudioStream, enabled: bool) -> void:
 			stream.loop_end = int(stream.get_length() * float(stream.mix_rate))
 
 func _load_audio_stream(resource_path: String) -> AudioStream:
-	if ResourceLoader.exists(resource_path, "AudioStream"):
-		var resource := load(resource_path)
-		if resource is AudioStream:
-			return resource
-	var lower_path := resource_path.to_lower()
-	if lower_path.ends_with(".mp3"):
-		return AudioStreamMP3.load_from_file(resource_path)
-	if lower_path.ends_with(".ogg"):
-		return AudioStreamOggVorbis.load_from_file(resource_path)
-	if lower_path.ends_with(".wav"):
-		return AudioStreamWAV.load_from_file(resource_path)
-	return null
+	return ResourceLoadUtil.load_audio_stream(resource_path)
