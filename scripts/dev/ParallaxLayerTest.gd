@@ -1,6 +1,7 @@
 extends SceneTree
 
 const PARALLAX_SCROLLER_SCRIPT := preload("res://scripts/game/ParallaxScroller.gd")
+const StageCatalog := preload("res://scripts/data/stage/StageCatalog.gd")
 
 func _init() -> void:
 	call_deferred("_run")
@@ -8,7 +9,7 @@ func _init() -> void:
 func _run() -> void:
 	var parallax = PARALLAX_SCROLLER_SCRIPT.new()
 	root.add_child(parallax)
-	parallax.setup()
+	parallax.setup(StageCatalog.get_default_stage().runner_config)
 	await process_frame
 
 	var sky = parallax.get_node_or_null("Sky")

@@ -1,6 +1,7 @@
 extends Node2D
 class_name FeverImpactOverlay
 
+const ViewportUtil := preload("res://scripts/utils/ViewportUtil.gd")
 const OVERLAY_Z_INDEX := -10
 const SPEED_LINE_COUNT := 100
 const SPEED_LINE_MIN_WIDTH := 25.0
@@ -258,10 +259,4 @@ func _random_fever_color(alpha: float) -> Color:
 			return Color(1.0, 0.28, 0.95, alpha)
 
 func _get_viewport_size() -> Vector2:
-	var viewport := get_viewport()
-	if viewport == null:
-		return DEFAULT_VIEWPORT_SIZE
-	var viewport_size := viewport.get_visible_rect().size
-	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
-		return DEFAULT_VIEWPORT_SIZE
-	return viewport_size
+	return ViewportUtil.get_visible_viewport_size(self, DEFAULT_VIEWPORT_SIZE)

@@ -18,6 +18,8 @@ var normal_index := 0
 
 var item_rules: ItemSpawnRules
 var fever_spawner: FeverSpawner
+var runner_config = null
+var object_visual_set = null
 
 var fever_active := false
 var fever_time_left := 0.0
@@ -36,12 +38,19 @@ var _player_max_hp_provider: Callable
 func _ready() -> void:
 	item_rules = ItemSpawnRules.new()
 	fever_spawner = FeverSpawner.new()
+	_apply_config_to_helpers()
+
+func configure(config, visual_set = null) -> void:
+	runner_config = config
+	object_visual_set = visual_set
+	_apply_config_to_helpers()
 
 func start(seed_value: int = 0) -> void:
 	if item_rules == null:
 		item_rules = ItemSpawnRules.new()
 	if fever_spawner == null:
 		fever_spawner = FeverSpawner.new()
+	_apply_config_to_helpers()
 
 	schedule_seed = seed_value
 	running = true
@@ -59,7 +68,7 @@ func start(seed_value: int = 0) -> void:
 	item_rules.reset()
 	fever_spawner.reset()
 	var generator := NormalScheduleGenerator.new()
-	normal_schedule = generator.generate(schedule_seed)
+	normal_schedule = generator.generate(schedule_seed, runner_config)
 	normal_index = 0
 
 func stop() -> void:
@@ -101,7 +110,7 @@ func _process(delta: float) -> void:
 	stage_time += delta
 	_elapsed = stage_time
 
-	if stage_time >= SpawnBalance.STAGE_DURATION:
+	if stage_time >= _get_stage_duration():
 		_skip_normal_events_until(stage_time)
 		return
 
@@ -161,7 +170,7 @@ func _spawn_fever_rush_object(type_name: String) -> void:
 
 func _spawn_object(type_name: String, from_fever_rush: bool = false) -> void:
 	var object := OBJECT_SCENE.instantiate()
-	object.setup(type_name)
+	object.setup(type_name, object_visual_set)
 	object.add_to_group("spawned_object")
 	if from_fever_rush:
 		object.set_meta("fever_rush_spawn", true)
@@ -178,3 +187,14 @@ func _get_player_max_hp() -> int:
 	if _player_max_hp_provider.is_valid():
 		return int(_player_max_hp_provider.call())
 	return GameBalance.MAX_HP
+
+func _apply_config_to_helpers() -> void:
+	if item_rules != null:
+		item_rules.configure(runner_config)
+	if fever_spawner != null:
+		fever_spawner.configure(runner_config)
+
+func _get_stage_duration() -> float:
+	if runner_config != null:
+		return float(runner_config.duration_seconds)
+	return SpawnBalance.STAGE_DURATION

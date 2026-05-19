@@ -2,6 +2,8 @@ extends Control
 class_name CharacterSelect
 
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
+const ResourceLoadUtil := preload("res://scripts/utils/ResourceLoadUtil.gd")
+const ProgressStore := preload("res://scripts/save/ProgressStore.gd")
 const MAIN_MENU_SCENE_PATH := "res://scenes/game/MainMenu.tscn"
 const DEFAULT_MESSAGE := "More characters will be available in future versions."
 
@@ -61,6 +63,7 @@ func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	AudioHooksScript.play_lobby_music(self)
+	_apply_saved_character_selection()
 	_build_scene()
 
 func _input(event: InputEvent) -> void:
@@ -400,6 +403,9 @@ func _on_character_card_pressed(data: Dictionary) -> void:
 	AudioHooksScript.play_ui_button_click(self)
 	if bool(data.get("selected", false)):
 		_show_message("Already selected")
+	elif bool(data.get("unlocked", false)):
+		_save_selected_character(String(data.get("id", "player1")))
+		_show_message("Selected")
 	else:
 		_show_message("Coming soon")
 
@@ -446,13 +452,23 @@ func _restore_default_message() -> void:
 func _on_back_button_pressed() -> void:
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
 
-func _load_texture(path: String) -> Texture2D:
-	if ResourceLoader.exists(path, "Texture2D"):
-		var imported_texture := load(path)
-		if imported_texture is Texture2D:
-			return imported_texture
+func _apply_saved_character_selection() -> void:
+	var progress = ProgressStore.load_progress()
+	var selected_id: String = progress.selected_character_id
+	var selected_found := false
+	for character in characters:
+		var is_selected: bool = String(character.get("id", "")) == selected_id and bool(character.get("unlocked", false))
+		character["selected"] = is_selected
+		selected_found = selected_found or is_selected
+	if selected_found:
+		return
+	for character in characters:
+		character["selected"] = String(character.get("id", "")) == "player1"
 
-	var image := Image.new()
-	if image.load(path) == OK and not image.is_empty():
-		return ImageTexture.create_from_image(image)
-	return null
+func _save_selected_character(character_id: String) -> void:
+	var progress = ProgressStore.load_progress()
+	progress.selected_character_id = character_id
+	ProgressStore.save_progress(progress)
+
+func _load_texture(path: String) -> Texture2D:
+	return ResourceLoadUtil.load_texture(path)

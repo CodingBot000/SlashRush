@@ -2,8 +2,8 @@ extends CanvasLayer
 class_name SettingsPopup
 
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
+const DebugFlagsAccess := preload("res://scripts/utils/DebugFlagsAccess.gd")
 const GAME_SETTINGS_PATH := "/root/GameSettings"
-const DEBUG_FLAGS_PATH := "/root/DebugFlags"
 
 var root: Control
 var dim: ColorRect
@@ -242,4 +242,4 @@ func _get_game_settings() -> Node:
 	return get_node_or_null(GAME_SETTINGS_PATH)
 
 func _get_debug_flags() -> Node:
-	return get_node_or_null(DEBUG_FLAGS_PATH)
+	return DebugFlagsAccess.get_debug_flags(self)

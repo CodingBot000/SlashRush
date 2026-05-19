@@ -1,6 +1,7 @@
 extends Control
 class_name ComboImpactPopup
 
+const ResourceLoadUtil := preload("res://scripts/utils/ResourceLoadUtil.gd")
 const COMBO_TEXTURE_PATH := "res://assets/ui/combo.png"
 const DIGIT_TEXTURE_PATH_FORMAT := "res://assets/ui/num%d.png"
 const END_SIZE := Vector2(500.0, 375.0)
@@ -114,12 +115,4 @@ func _hide_popup() -> void:
 	_tween = null
 
 func _load_texture(path: String) -> Texture2D:
-	if ResourceLoader.exists(path, "Texture2D"):
-		var imported_texture := load(path)
-		if imported_texture is Texture2D:
-			return imported_texture
-
-	var image := Image.new()
-	if image.load(path) == OK and not image.is_empty():
-		return ImageTexture.create_from_image(image)
-	return null
+	return ResourceLoadUtil.load_texture(path)

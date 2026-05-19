@@ -4,6 +4,7 @@ class_name PlayerController
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
 const HapticHooksScript := preload("res://scripts/haptics/HapticHooks.gd")
+const ResourceLoadUtil := preload("res://scripts/utils/ResourceLoadUtil.gd")
 const RUN_FRAME_PATHS := [
 	"res://assets/sprites/samurai/run/frame_01.png",
 	"res://assets/sprites/samurai/run/frame_02.png",
@@ -46,6 +47,7 @@ var _motion_state := MotionState.RUN
 var _pre_damage_state := MotionState.RUN
 var _slash_active := false
 var _run_animation_speed_multiplier := 1.0
+var visual_profile = null
 
 func _ready() -> void:
 	_build_visual()
@@ -69,6 +71,12 @@ func play_run() -> void:
 func set_run_animation_speed_multiplier(multiplier: float) -> void:
 	_run_animation_speed_multiplier = maxf(multiplier, 0.0)
 	_apply_run_animation_speed()
+
+func configure_visual_profile(profile) -> void:
+	visual_profile = profile
+	if visual_root != null:
+		_build_visual()
+		_apply_motion_state()
 
 func play_idle() -> void:
 	if _motion_state == MotionState.DAMAGE:
@@ -135,6 +143,7 @@ func _finish_damage() -> void:
 	_apply_motion_state()
 
 func _build_visual() -> void:
+	_clear_visual()
 	_add_foot_shadow()
 
 	visual_root = Node2D.new()
@@ -142,9 +151,9 @@ func _build_visual() -> void:
 	add_child(visual_root)
 
 	if _add_run_animation():
-		_add_static_sprite("IdleSprite", IDLE_TEXTURE_PATH, 0)
-		_add_static_sprite("DamageSprite", DAMAGE_TEXTURE_PATH, 0)
-		_add_static_sprite("DeadSprite", DEAD_TEXTURE_PATH, 0)
+		_add_static_sprite("IdleSprite", _get_idle_texture_path(), 0)
+		_add_static_sprite("DamageSprite", _get_damage_texture_path(), 0)
+		_add_static_sprite("DeadSprite", _get_dead_texture_path(), 0)
 		_add_sword_layers()
 	else:
 		var texture := _find_character_texture()
@@ -152,6 +161,27 @@ func _build_visual() -> void:
 			_add_static_character_sprite(texture)
 		else:
 			_add_placeholder_body()
+
+func _clear_visual() -> void:
+	if _slash_tween:
+		_slash_tween.kill()
+		_slash_tween = null
+	if _damage_tween:
+		_damage_tween.kill()
+		_damage_tween = null
+	_slash_active = false
+	for child in get_children():
+		if child == foot_shadow or child == visual_root:
+			remove_child(child)
+			child.free()
+	foot_shadow = null
+	visual_root = null
+	run_sprite = null
+	idle_sprite = null
+	damage_sprite = null
+	dead_sprite = null
+	sword_sheath_sprite = null
+	sword_slash_sprite = null
 
 func _add_foot_shadow() -> void:
 	foot_shadow = Polygon2D.new()
@@ -168,7 +198,7 @@ func _add_run_animation() -> bool:
 	frames.set_animation_loop(RUN_ANIMATION_NAME, true)
 	frames.set_animation_speed(RUN_ANIMATION_NAME, RUN_ANIMATION_FPS)
 
-	for frame_path in RUN_FRAME_PATHS:
+	for frame_path in _get_run_frame_paths():
 		var texture := _load_texture(frame_path)
 		if not texture:
 			return false
@@ -220,7 +250,7 @@ func _add_static_sprite(sprite_name: String, texture_path: String, z_index: int)
 	return sprite
 
 func _add_sword_layers() -> void:
-	var sheath_texture := _load_texture(SWORD_SHEATH_TEXTURE_PATH)
+	var sheath_texture := _load_texture(_get_sword_sheath_texture_path())
 	if sheath_texture:
 		sword_sheath_sprite = Sprite2D.new()
 		sword_sheath_sprite.name = "SwordSheath"
@@ -230,7 +260,7 @@ func _add_sword_layers() -> void:
 		sword_sheath_sprite.z_index = 10
 		visual_root.add_child(sword_sheath_sprite)
 
-	var slash_texture := _load_texture(SWORD_SLASH_TEXTURE_PATH)
+	var slash_texture := _load_texture(_get_sword_slash_texture_path())
 	if slash_texture:
 		sword_slash_sprite = Sprite2D.new()
 		sword_slash_sprite.name = "SwordSlash"
@@ -350,16 +380,37 @@ func _find_character_texture() -> Texture2D:
 	return null
 
 func _load_texture(resource_path: String) -> Texture2D:
-	if ResourceLoader.exists(resource_path, "Texture2D"):
-		var imported_texture := load(resource_path)
-		if imported_texture is Texture2D:
-			return imported_texture
+	return ResourceLoadUtil.load_texture(resource_path)
 
-	var image := Image.new()
-	var error := image.load(resource_path)
-	if error == OK and not image.is_empty():
-		return ImageTexture.create_from_image(image)
-	return null
+func _get_run_frame_paths() -> Array:
+	if visual_profile != null and visual_profile.run_frame_paths.size() > 0:
+		return visual_profile.run_frame_paths
+	return RUN_FRAME_PATHS
+
+func _get_idle_texture_path() -> String:
+	if visual_profile != null:
+		return String(visual_profile.idle_texture_path)
+	return IDLE_TEXTURE_PATH
+
+func _get_damage_texture_path() -> String:
+	if visual_profile != null:
+		return String(visual_profile.damage_texture_path)
+	return DAMAGE_TEXTURE_PATH
+
+func _get_dead_texture_path() -> String:
+	if visual_profile != null:
+		return String(visual_profile.dead_texture_path)
+	return DEAD_TEXTURE_PATH
+
+func _get_sword_sheath_texture_path() -> String:
+	if visual_profile != null:
+		return String(visual_profile.sword_sheath_texture_path)
+	return SWORD_SHEATH_TEXTURE_PATH
+
+func _get_sword_slash_texture_path() -> String:
+	if visual_profile != null:
+		return String(visual_profile.sword_slash_texture_path)
+	return SWORD_SLASH_TEXTURE_PATH
 
 func _circle_points(radius: float, point_count: int) -> PackedVector2Array:
 	var points := PackedVector2Array()

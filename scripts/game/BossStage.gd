@@ -9,6 +9,8 @@ signal combo_increased(combo)
 
 const PLAYER_SCENE := preload("res://scenes/player/Player.tscn")
 const ROBOT_SAMURAI_BOSS_SCENE := preload("res://scenes/boss/RobotSamuraiBoss.tscn")
+const ActionTypes := preload("res://scripts/data/ActionTypes.gd")
+const BossStageContextScript := preload("res://scripts/game/boss/BossStageContext.gd")
 const GameBalance := preload("res://scripts/data/GameBalance.gd")
 const PlayerLifeState := preload("res://scripts/game/PlayerLifeState.gd")
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
@@ -16,18 +18,12 @@ const HapticHooksScript := preload("res://scripts/haptics/HapticHooks.gd")
 const SLICE_EFFECT_FACTORY_SCRIPT := preload("res://scripts/objects/SliceEffectFactory.gd")
 const BOSS_FEVER_MODE_SCRIPT := preload("res://scripts/game/BossFeverMode.gd")
 const FEVER_IMPACT_OVERLAY_SCRIPT := preload("res://scripts/effects/FeverImpactOverlay.gd")
-const BOSS_BACKGROUND_PATH := "res://assets/background/stage1/boss_background.png"
+const ResourceLoadUtil := preload("res://scripts/utils/ResourceLoadUtil.gd")
+const ViewportUtil := preload("res://scripts/utils/ViewportUtil.gd")
+const DebugFlagsAccess := preload("res://scripts/utils/DebugFlagsAccess.gd")
+const NodeUtil := preload("res://scripts/utils/NodeUtil.gd")
 const BOSS_BACKGROUND_ROTATION_SPEED := 0.05
 const ENABLE_FEVER_IMPACT_OVERLAY := true
-const BOSS_HIT_SCRAP_TEXTURE_PATHS := [
-	"res://assets/boss/robot_samurai/scrap1.png",
-	"res://assets/boss/robot_samurai/scrap2.png",
-	"res://assets/boss/robot_samurai/scrap3.png",
-	"res://assets/boss/robot_samurai/scrap4.png",
-	"res://assets/boss/robot_samurai/scrap5.png",
-	"res://assets/boss/robot_samurai/scrap6.png",
-	"res://assets/boss/robot_samurai/scrap7.png",
-]
 const BOSS_HIT_SLICE_SIZE := Vector2(340.0, 340.0)
 const CIRCLE_CUE_FRAME_PATHS := [
 	"res://assets/ui/circle_01.png",
@@ -79,6 +75,8 @@ var phase2_patterns: Array = []
 var phase1_pattern_index := 0
 var phase2_pattern_index := 0
 var current_phase := 1
+var stage_context = null
+var boss_config = null
 
 enum BossPatternCode {
 	RIGHT_ARM_SLAM = 1,
@@ -89,7 +87,6 @@ enum BossPatternCode {
 
 const BOSS_PHASE_1 := 1
 const BOSS_PHASE_2 := 2
-const BOSS_PHASE_DECK_SIZE := 30
 const PHASE_1_TAP_COUNT := 10
 const PHASE_1_DOUBLE_TAP_COUNT := 8
 const PHASE_1_LONG_TAP_COUNT := 8
@@ -100,15 +97,24 @@ const PHASE_2_LONG_TAP_COUNT := 11
 const PHASE_2_WAIT_COUNT := 4
 
 func _ready() -> void:
+	_ensure_stage_context()
 	_build_scene()
 	visible = false
 
+func configure(context) -> void:
+	stage_context = context
+	if stage_context != null:
+		boss_config = stage_context.boss_config
+	_apply_boss_config_to_scene()
+
 func start_boss(start_score: int, start_coins: int, start_hp: int) -> void:
+	_ensure_stage_context()
+	_apply_boss_config_to_scene()
 	_clear_children(piece_root)
 	score = start_score
 	coins = start_coins
 	hp = min(start_hp, GameBalance.MAX_HP) if _is_player_invincible() else clampi(start_hp, 1, GameBalance.MAX_HP)
-	boss_hp = GameBalance.BOSS_MAX_HP
+	boss_hp = _get_boss_max_hp()
 	boss_combo = 0
 	player_hurt_timer = 0.0
 	_set_fever_impact_active(false)
@@ -192,6 +198,8 @@ func _build_scene() -> void:
 	_add_fever_impact_overlay()
 
 	player = PLAYER_SCENE.instantiate()
+	if player.has_method("configure_visual_profile"):
+		player.configure_visual_profile(_get_character_profile())
 	player.position = Vector2(210.0, GameBalance.GAMEPLAY_BASELINE_Y)
 	add_child(player)
 
@@ -201,7 +209,7 @@ func _build_scene() -> void:
 	add_child(boss_root)
 
 	# Temporary visual mount; combat state remains owned by BossStage for now.
-	boss_visual = ROBOT_SAMURAI_BOSS_SCENE.instantiate()
+	boss_visual = _instantiate_boss_visual()
 	boss_visual.name = "RobotSamuraiBossTestVisual"
 	boss_root.add_child(boss_visual)
 
@@ -236,6 +244,7 @@ func _build_scene() -> void:
 	boss_fever_mode = BOSS_FEVER_MODE_SCRIPT.new()
 	boss_fever_mode.name = "BossFeverMode"
 	add_child(boss_fever_mode)
+	boss_fever_mode.configure(_get_boss_config())
 	boss_fever_mode.started.connect(_on_boss_fever_started)
 	boss_fever_mode.ended.connect(_on_boss_fever_ended)
 
@@ -259,7 +268,7 @@ func _add_boss_background() -> void:
 	boss_background_fill.z_index = -200
 	add_child(boss_background_fill)
 
-	var texture := _load_texture(BOSS_BACKGROUND_PATH)
+	var texture := _load_texture(_get_boss_background_path())
 	if texture == null:
 		return
 
@@ -270,6 +279,99 @@ func _add_boss_background() -> void:
 	boss_background_sprite.z_index = -190
 	add_child(boss_background_sprite)
 	_update_boss_background_layout()
+
+func _ensure_stage_context() -> void:
+	if stage_context == null:
+		stage_context = BossStageContextScript.make_default()
+	if boss_config == null and stage_context != null:
+		boss_config = stage_context.boss_config
+
+func _get_boss_config():
+	_ensure_stage_context()
+	return boss_config
+
+func _get_character_profile():
+	_ensure_stage_context()
+	return stage_context.character_profile if stage_context != null else null
+
+func _apply_boss_config_to_scene() -> void:
+	_ensure_stage_context()
+	if player != null and player.has_method("configure_visual_profile"):
+		player.configure_visual_profile(_get_character_profile())
+	if boss_background_sprite != null:
+		boss_background_sprite.texture = _load_texture(_get_boss_background_path())
+	if boss_root != null:
+		_rebuild_boss_visual_if_needed()
+	if boss_fever_mode != null:
+		boss_fever_mode.configure(_get_boss_config())
+	if piece_root != null:
+		_load_boss_hit_scrap_textures()
+
+func _instantiate_boss_visual():
+	var packed_scene = _load_boss_scene()
+	var visual = packed_scene.instantiate() if packed_scene != null else ROBOT_SAMURAI_BOSS_SCENE.instantiate()
+	visual.set_meta("boss_scene_path", _get_boss_scene_path())
+	return visual
+
+func _rebuild_boss_visual_if_needed() -> void:
+	if boss_visual != null and String(boss_visual.get_meta("boss_scene_path", "")) == _get_boss_scene_path():
+		return
+	if boss_visual != null:
+		boss_visual.queue_free()
+	boss_visual = _instantiate_boss_visual()
+	boss_visual.name = "RobotSamuraiBossTestVisual"
+	boss_root.add_child(boss_visual)
+
+func _load_boss_scene() -> PackedScene:
+	var resource := load(_get_boss_scene_path())
+	if resource is PackedScene:
+		return resource
+	return ROBOT_SAMURAI_BOSS_SCENE
+
+func _get_boss_scene_path() -> String:
+	if _get_boss_config() != null:
+		return String(_get_boss_config().boss_scene_path)
+	return "res://scenes/boss/RobotSamuraiBoss.tscn"
+
+func _get_boss_background_path() -> String:
+	if _get_boss_config() != null:
+		return String(_get_boss_config().boss_background_path)
+	return ""
+
+func _get_boss_max_hp() -> int:
+	if _get_boss_config() != null:
+		return int(_get_boss_config().boss_max_hp)
+	return GameBalance.BOSS_MAX_HP
+
+func _get_boss_fever_gain_per_success() -> int:
+	if _get_boss_config() != null:
+		return int(_get_boss_config().boss_fever_gain_per_success)
+	return GameBalance.BOSS_FEVER_GAIN_PER_SUCCESS
+
+func _get_boss_success_score() -> int:
+	if _get_boss_config() != null:
+		return int(_get_boss_config().success_score)
+	return 200
+
+func _get_boss_fever_success_score() -> int:
+	if _get_boss_config() != null:
+		return int(_get_boss_config().fever_success_score)
+	return 400
+
+func _get_boss_clear_bonus_score() -> int:
+	if _get_boss_config() != null:
+		return int(_get_boss_config().clear_bonus_score)
+	return 500
+
+func _get_boss_phase_counts(phase_id: String) -> Dictionary:
+	if _get_boss_config() != null and _get_boss_config().phase_pattern_counts is Dictionary:
+		return _get_boss_config().phase_pattern_counts.get(phase_id, {})
+	return {}
+
+func _get_boss_hit_scrap_texture_paths() -> Array:
+	if _get_boss_config() != null and _get_boss_config().hit_scrap_texture_paths is Array and not _get_boss_config().hit_scrap_texture_paths.is_empty():
+		return _get_boss_config().hit_scrap_texture_paths
+	return []
 
 func _next_pattern() -> void:
 	if boss_hp <= 0:
@@ -293,19 +395,21 @@ func _next_pattern() -> void:
 
 func _build_phase_pattern_decks() -> void:
 	randomize()
+	var phase1_counts := _get_boss_phase_counts("phase_1")
+	var phase2_counts := _get_boss_phase_counts("phase_2")
 	phase1_patterns = _build_pattern_deck(
 		"phase_1",
-		PHASE_1_TAP_COUNT,
-		PHASE_1_DOUBLE_TAP_COUNT,
-		PHASE_1_LONG_TAP_COUNT,
-		PHASE_1_WAIT_COUNT
+		int(phase1_counts.get("tap", PHASE_1_TAP_COUNT)),
+		int(phase1_counts.get("double_tap", PHASE_1_DOUBLE_TAP_COUNT)),
+		int(phase1_counts.get("long_tap", PHASE_1_LONG_TAP_COUNT)),
+		int(phase1_counts.get("no_input", PHASE_1_WAIT_COUNT))
 	)
 	phase2_patterns = _build_pattern_deck(
 		"phase_2",
-		PHASE_2_TAP_COUNT,
-		PHASE_2_DOUBLE_TAP_COUNT,
-		PHASE_2_LONG_TAP_COUNT,
-		PHASE_2_WAIT_COUNT
+		int(phase2_counts.get("tap", PHASE_2_TAP_COUNT)),
+		int(phase2_counts.get("double_tap", PHASE_2_DOUBLE_TAP_COUNT)),
+		int(phase2_counts.get("long_tap", PHASE_2_LONG_TAP_COUNT)),
+		int(phase2_counts.get("no_input", PHASE_2_WAIT_COUNT))
 	)
 	phase1_patterns.shuffle()
 	phase2_patterns.shuffle()
@@ -316,8 +420,9 @@ func _build_pattern_deck(phase_id: String, tap_count: int, double_tap_count: int
 	_append_patterns(deck, phase_id, "double_tap", double_tap_count)
 	_append_patterns(deck, phase_id, "long_tap", long_tap_count)
 	_append_patterns(deck, phase_id, "no_input", wait_count)
-	if deck.size() != BOSS_PHASE_DECK_SIZE:
-		push_warning("%s boss pattern deck has %d entries, expected %d." % [phase_id, deck.size(), BOSS_PHASE_DECK_SIZE])
+	var expected_size := tap_count + double_tap_count + long_tap_count + wait_count
+	if deck.size() != expected_size:
+		push_warning("%s boss pattern deck has %d entries, expected %d." % [phase_id, deck.size(), expected_size])
 	return deck
 
 func _append_patterns(deck: Array, phase_id: String, action: String, count: int) -> void:
@@ -338,7 +443,7 @@ func _make_boss_pattern(phase_id: String, action: String, index: int) -> Diction
 			return {}
 
 func _get_current_boss_phase() -> int:
-	if float(boss_hp) <= float(GameBalance.BOSS_MAX_HP) * 0.5:
+	if float(boss_hp) <= float(_get_boss_max_hp()) * 0.5:
 		return BOSS_PHASE_2
 	return BOSS_PHASE_1
 
@@ -361,11 +466,11 @@ func _success_pattern(from_fever: bool = false) -> void:
 		return
 	_hide_pattern_cue()
 	boss_hp -= 1
-	score += 400 if from_fever else 200
+	score += _get_boss_fever_success_score() if from_fever else _get_boss_success_score()
 	if not from_fever:
 		boss_combo += 1
 		combo_increased.emit(boss_combo)
-		boss_fever_mode.add_fever(GameBalance.BOSS_FEVER_GAIN_PER_SUCCESS)
+		boss_fever_mode.add_fever(_get_boss_fever_gain_per_success())
 	current_pattern = {}
 	if boss_hp > 0:
 		_play_boss_hit()
@@ -417,7 +522,7 @@ func _finish(won: bool) -> void:
 	_set_fever_impact_active(false)
 	_hide_pattern_cue()
 	if won:
-		score += 500
+		score += _get_boss_clear_bonus_score()
 		feedback_requested.emit("FINISH", Color.html("#ffef8a"))
 		if boss_visual and boss_visual.has_method("start_defeated"):
 			boss_visual.call("start_defeated")
@@ -430,13 +535,7 @@ func _finish(won: bool) -> void:
 	})
 
 func _action_matches(required: String, action: String) -> bool:
-	if _is_boss_fever_active():
-		return true
-	if required == action:
-		return true
-	if required == "tap" and action == "double_tap":
-		return true
-	return false
+	return ActionTypes.matches(required, action, _is_boss_fever_active())
 
 func is_player_hurt_locked() -> bool:
 	return active and player_hurt_timer > 0.0
@@ -515,11 +614,11 @@ func _get_boss_timer_ratio() -> float:
 
 func _emit_boss_stats(time_ratio: float) -> void:
 	var hint := "FEVER" if _is_boss_fever_active() else String(current_pattern["hint"])
-	stats_changed.emit(score, hp, boss_hp, GameBalance.BOSS_MAX_HP, hint, time_ratio)
+	stats_changed.emit(score, hp, boss_hp, _get_boss_max_hp(), hint, time_ratio)
 
 func _load_boss_hit_scrap_textures() -> void:
 	boss_hit_scrap_textures.clear()
-	for texture_path in BOSS_HIT_SCRAP_TEXTURE_PATHS:
+	for texture_path in _get_boss_hit_scrap_texture_paths():
 		var texture := _load_texture(texture_path)
 		if texture:
 			boss_hit_scrap_textures.append(texture)
@@ -648,29 +747,16 @@ func _sync_pattern_prompt_layout(viewport_size: Vector2) -> void:
 		)
 
 func _get_viewport_size() -> Vector2:
-	var viewport_size := get_viewport_rect().size
-	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
-		viewport_size = Vector2(1280.0, 720.0)
-	return viewport_size
+	return ViewportUtil.get_viewport_size(self)
 
 func _load_texture(path: String) -> Texture2D:
-	if ResourceLoader.exists(path, "Texture2D"):
-		var imported_texture := load(path)
-		if imported_texture is Texture2D:
-			return imported_texture
-
-	var image := Image.new()
-	if image.load(path) == OK and not image.is_empty():
-		return ImageTexture.create_from_image(image)
-	return null
+	return ResourceLoadUtil.load_texture(path)
 
 func _clear_children(node: Node) -> void:
-	for child in node.get_children():
-		child.queue_free()
+	NodeUtil.clear_children(node)
 
 func _is_player_invincible() -> bool:
-	var debug_flags := get_node_or_null("/root/DebugFlags")
-	return debug_flags != null and bool(debug_flags.player_invincible)
+	return DebugFlagsAccess.is_player_invincible(self)
 
 func _set_fever_impact_active(active_value: bool) -> void:
 	if fever_impact_overlay != null and fever_impact_overlay.has_method("set_active"):

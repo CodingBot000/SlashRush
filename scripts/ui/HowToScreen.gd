@@ -3,6 +3,7 @@ class_name HowToScreen
 
 const AudioHooksScript := preload("res://scripts/audio/AudioHooks.gd")
 const ObjectTypes := preload("res://scripts/data/ObjectTypes.gd")
+const ResourceLoadUtil := preload("res://scripts/utils/ResourceLoadUtil.gd")
 
 const MAIN_MENU_SCENE_PATH := "res://scenes/game/MainMenu.tscn"
 const KNOWN_OBJECT_TYPES := ["enemy_basic", "bomb", "enemy_fast", "enemy_armor", "coin", "fever_orb", "heal"]
@@ -342,15 +343,7 @@ func _load_target_texture(target: String) -> Texture2D:
 	return _load_texture(texture_path)
 
 func _load_texture(path: String) -> Texture2D:
-	if ResourceLoader.exists(path, "Texture2D"):
-		var imported_texture := load(path)
-		if imported_texture is Texture2D:
-			return imported_texture
-
-	var image := Image.new()
-	if image.load(path) == OK and not image.is_empty():
-		return ImageTexture.create_from_image(image)
-	return null
+	return ResourceLoadUtil.load_texture(path)
 
 func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)

@@ -10,6 +10,16 @@ const GameBalance := preload("res://scripts/data/GameBalance.gd")
 var fever := 0
 var active := false
 var time_left := 0.0
+var fever_max := GameBalance.BOSS_FEVER_MAX
+var duration_seconds := GameBalance.BOSS_FEVER_DURATION
+
+func configure(boss_config) -> void:
+	if boss_config != null:
+		fever_max = int(boss_config.boss_fever_max)
+		duration_seconds = float(boss_config.boss_fever_duration)
+	else:
+		fever_max = GameBalance.BOSS_FEVER_MAX
+		duration_seconds = GameBalance.BOSS_FEVER_DURATION
 
 func reset() -> void:
 	fever = 0
@@ -20,8 +30,8 @@ func reset() -> void:
 func add_fever(amount: int) -> void:
 	if active or amount <= 0:
 		return
-	fever = min(GameBalance.BOSS_FEVER_MAX, fever + amount)
-	if fever >= GameBalance.BOSS_FEVER_MAX:
+	fever = min(fever_max, fever + amount)
+	if fever >= fever_max:
 		start()
 	else:
 		changed.emit(fever, active, time_left)
@@ -30,8 +40,8 @@ func start() -> void:
 	if active:
 		return
 	active = true
-	fever = GameBalance.BOSS_FEVER_MAX
-	time_left = GameBalance.BOSS_FEVER_DURATION
+	fever = fever_max
+	time_left = duration_seconds
 	started.emit()
 	changed.emit(fever, active, time_left)
 
@@ -42,7 +52,7 @@ func update(delta: float) -> void:
 	if time_left <= 0.0:
 		end()
 		return
-	fever = max(0, int(round((time_left / GameBalance.BOSS_FEVER_DURATION) * float(GameBalance.BOSS_FEVER_MAX))))
+	fever = max(0, int(round((time_left / duration_seconds) * float(fever_max))))
 	changed.emit(fever, active, time_left)
 
 func end() -> void:
@@ -57,4 +67,4 @@ func end() -> void:
 func get_time_ratio() -> float:
 	if not active:
 		return 0.0
-	return clamp(time_left / GameBalance.BOSS_FEVER_DURATION, 0.0, 1.0)
+	return clamp(time_left / duration_seconds, 0.0, 1.0)
