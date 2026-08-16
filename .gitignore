@@ -15,7 +15,6 @@ output/
 
 # Temporary/generated work folders
 tmp/
-docs/
 backup1_assetsOld/
 assets/tmp_newasset/
 assets/sprites/**/run_preview.*
